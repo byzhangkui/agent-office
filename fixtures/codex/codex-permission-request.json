@@ -1,0 +1,13 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "turn_id": "turn-1",
+  "transcript_path": "/tmp/agent-office-example/codex-sessions/example.jsonl",
+  "cwd": "/tmp/agent-office-example/workspace",
+  "hook_event_name": "PermissionRequest",
+  "model": "gpt-5.5",
+  "permission_mode": "default",
+  "tool_name": "exec_command",
+  "tool_input": {
+    "cmd": "pnpm build"
+  }
+}

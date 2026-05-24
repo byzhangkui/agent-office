@@ -1,0 +1,14 @@
+{
+  "name": "@agent-office/hook-adapter",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "codex:test": "node src/codex-hook-adapter.mjs < ../../fixtures/codex/codex-user-prompt-submit.json",
+    "install:codex:dry-run": "node src/install-codex-hooks.mjs --codex-home \"$HOME/.codex\" --adapter src/codex-hook-adapter.mjs --dry-run",
+    "install:codex": "node src/install-codex-hooks.mjs --codex-home \"$HOME/.codex\" --adapter src/codex-hook-adapter.mjs"
+  },
+  "dependencies": {
+    "@agent-office/protocol": "workspace:*"
+  }
+}

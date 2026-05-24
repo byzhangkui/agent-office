@@ -1,0 +1,16 @@
+{
+  "name": "agent-office-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@10.23.0",
+  "scripts": {
+    "dev": "pnpm --filter @agent-office/desktop dev",
+    "build": "pnpm --filter @agent-office/desktop build",
+    "preview": "pnpm --filter @agent-office/desktop preview",
+    "tauri": "pnpm --filter @agent-office/desktop tauri",
+    "hook:codex:test": "pnpm --filter @agent-office/hook-adapter codex:test",
+    "hook:install:codex:dry-run": "pnpm --filter @agent-office/hook-adapter install:codex:dry-run",
+    "hook:install:codex": "pnpm --filter @agent-office/hook-adapter install:codex"
+  }
+}
