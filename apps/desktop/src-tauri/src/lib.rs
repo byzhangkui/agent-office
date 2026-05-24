@@ -37,6 +37,7 @@ const TRAY_MENU_SHOW_ID: &str = "show";
 const TRAY_MENU_SETTINGS_ID: &str = "settings";
 const TRAY_MENU_QUIT_ID: &str = "quit";
 const POPOVER_MARGIN: f64 = 8.0;
+const AUTO_HIDE_DELAY_MS: u64 = 120;
 const CODEX_HOOK_EVENTS: &[&str] = &[
     "SessionStart",
     "UserPromptSubmit",
@@ -265,16 +266,16 @@ fn setup_status_bar(app: &AppHandle) -> Result<(), String> {
 fn create_tray_template_icon() -> Image<'static> {
     const SIZE: u32 = 32;
     let mut rgba = vec![0; (SIZE * SIZE * 4) as usize];
-    draw_rect(&mut rgba, SIZE, 7, 7, 18, 2);
-    draw_rect(&mut rgba, SIZE, 7, 7, 2, 14);
-    draw_rect(&mut rgba, SIZE, 23, 7, 2, 14);
-    draw_rect(&mut rgba, SIZE, 7, 19, 18, 2);
-    draw_rect(&mut rgba, SIZE, 10, 10, 4, 3);
-    draw_rect(&mut rgba, SIZE, 16, 10, 6, 2);
-    draw_rect(&mut rgba, SIZE, 16, 14, 6, 2);
-    draw_rect(&mut rgba, SIZE, 10, 17, 12, 2);
-    draw_rect(&mut rgba, SIZE, 15, 21, 2, 4);
-    draw_rect(&mut rgba, SIZE, 11, 25, 10, 2);
+    draw_rect(&mut rgba, SIZE, 4, 4, 24, 3);
+    draw_rect(&mut rgba, SIZE, 4, 4, 3, 19);
+    draw_rect(&mut rgba, SIZE, 25, 4, 3, 19);
+    draw_rect(&mut rgba, SIZE, 4, 20, 24, 3);
+    draw_rect(&mut rgba, SIZE, 8, 8, 6, 4);
+    draw_rect(&mut rgba, SIZE, 17, 8, 8, 3);
+    draw_rect(&mut rgba, SIZE, 17, 14, 8, 3);
+    draw_rect(&mut rgba, SIZE, 8, 18, 16, 3);
+    draw_rect(&mut rgba, SIZE, 15, 23, 3, 4);
+    draw_rect(&mut rgba, SIZE, 10, 27, 13, 3);
     Image::new_owned(rgba, SIZE, SIZE)
 }
 
@@ -293,11 +294,24 @@ fn draw_rect(rgba: &mut [u8], canvas_width: u32, x: u32, y: u32, width: u32, hei
 fn setup_close_to_hide(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let window_to_hide = window.clone();
-        window.on_window_event(move |event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
+        let window_to_auto_hide = window.clone();
+        window.on_window_event(move |event| match event {
+            WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
                 let _ = window_to_hide.hide();
             }
+            WindowEvent::Focused(false) => {
+                let window = window_to_auto_hide.clone();
+                thread::spawn(move || {
+                    thread::sleep(Duration::from_millis(AUTO_HIDE_DELAY_MS));
+                    if matches!(window.is_visible(), Ok(true))
+                        && !matches!(window.is_focused(), Ok(true))
+                    {
+                        let _ = window.hide();
+                    }
+                });
+            }
+            _ => {}
         });
     }
 }
