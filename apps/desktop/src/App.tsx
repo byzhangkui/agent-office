@@ -81,6 +81,17 @@ export default function App(): JSX.Element {
             <button className="mini-icon-button" type="button" onClick={() => setSettingsOpen(true)} title="设置" aria-label="设置">
               <Settings size={15} />
             </button>
+            <button
+              className="activity-toggle"
+              type="button"
+              onClick={() => setActivityOpen((open) => !open)}
+              aria-expanded={activityOpen}
+              aria-label={activityOpen ? "隐藏运行记录" : "显示运行记录"}
+              title={activityOpen ? "隐藏运行记录" : "显示运行记录"}
+            >
+              {activityOpen ? <Activity size={16} /> : <ScrollText size={16} />}
+              <span>{activityOpen ? "隐藏" : "记录"}</span>
+            </button>
           </div>
         </header>
 
@@ -88,18 +99,6 @@ export default function App(): JSX.Element {
       </section>
 
       <aside className="side-panel" aria-label="运行记录">
-        <button
-          className="activity-toggle"
-          type="button"
-          onClick={() => setActivityOpen((open) => !open)}
-          aria-expanded={activityOpen}
-          aria-label={activityOpen ? "隐藏运行记录" : "显示运行记录"}
-          title={activityOpen ? "隐藏运行记录" : "显示运行记录"}
-        >
-          {activityOpen ? <Activity size={17} /> : <ScrollText size={17} />}
-          <span>{activityOpen ? "隐藏" : "记录"}</span>
-        </button>
-
         {activityOpen ? (
           <section className="event-log">
             <div className="section-title">

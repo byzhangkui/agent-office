@@ -15,7 +15,8 @@
 body {
   margin: 0;
   min-width: 960px;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 button {
@@ -24,12 +25,9 @@ button {
 
 .app-shell {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   height: 100vh;
   background: #e9ece0;
-}
-
-.app-shell.activity-closed {
-  grid-template-columns: minmax(0, 1fr) 76px;
 }
 
 .app-shell.activity-open {
@@ -105,6 +103,10 @@ h2 {
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.toolbar .mini-icon-button {
+  margin-left: 0;
 }
 
 .bridge-pill {
@@ -225,25 +227,19 @@ h2 {
 }
 
 .activity-closed .side-panel {
-  padding-right: 18px;
+  display: none;
 }
 
 .activity-toggle {
-  display: grid;
-  place-items: center;
-  grid-template-rows: auto auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   gap: 4px;
-  min-height: 54px;
+  min-height: 28px;
   border-radius: 8px;
-  padding: 7px 6px;
+  padding: 0 10px;
   font-size: 12px;
   font-weight: 700;
-}
-
-.activity-open .activity-toggle {
-  grid-template-columns: auto auto;
-  grid-template-rows: 1fr;
-  justify-content: center;
 }
 
 .agent-list-panel,
@@ -610,11 +606,13 @@ h2 {
 @media (max-width: 1100px) {
   body {
     min-width: 0;
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
   }
 
   .app-shell {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(560px, 62vh) auto;
     height: auto;
     min-height: 100vh;
   }
