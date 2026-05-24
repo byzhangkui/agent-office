@@ -73,6 +73,14 @@ The Node SSE bridge has been removed from the runtime design.
 - Verification: `pnpm build` completed successfully, `pnpm tauri dev` compiled and launched `target/debug/agent-office`, and `curl http://127.0.0.1:47391/health` returned `{"ok":true}`.
 - Avoid next time: keep a Tauri icon asset in `src-tauri/icons/`, commit `Cargo.lock` for desktop apps, and run `pnpm tauri dev` before handing off Tauri changes.
 
+## 2026-05-25 Tray Hook Settings
+
+- Commit: `6272843` (`Add tray settings for Codex hooks`).
+- Problem: Agent Office had no macOS status bar entry and no in-app place to inspect or change Codex hook registration. The local Codex config also had hook features disabled earlier, which can make valid `hooks.json` entries appear to do nothing.
+- Solution: added a Tauri tray icon with menu items for opening Agent Office, opening Settings, and quitting. Added a Settings panel that reads Codex hook status, registers Agent Office hooks for the supported Codex lifecycle events, unregisters only Agent Office hook entries, and enables the required Codex hook feature flags when registering.
+- Verification: `pnpm build` passed, `cargo check` passed, `pnpm tauri dev` launched the app, `curl http://127.0.0.1:47391/health` returned `{"ok":true}`, and `pnpm hook:codex:test` completed without adapter errors.
+- Avoid next time: hook-related UI should expose both `hooks.json` registration state and Codex feature flags, because either side can prevent events from being delivered.
+
 ## Manual Acceptance Steps
 
 1. Install Rust so `cargo` is available.
