@@ -89,6 +89,14 @@ The Node SSE bridge has been removed from the runtime design.
 - Verification: `pnpm build` passed, `cargo check` passed, `pnpm tauri build` generated `Agent Office.app` and `Agent Office_0.1.0_aarch64.dmg`, `Info.plist` includes `CFBundleIconFile = icon.icns`, the app bundle contains `Contents/Resources/icon.icns`, and a temporary hook-adapter error log wrote `2026-05-25 00:23:54.888 Asia/Shanghai ...`.
 - Avoid next time: keep Tauri `bundle.icon` wired to committed generated icon assets, use a dedicated template icon for status bar/menu bar UI instead of the app icon, and localize human-facing log timestamps at the point they are displayed or written.
 
+## 2026-05-25 Popover Window Polish
+
+- Commit: `381450b` (`Polish menu bar popover window`).
+- Problem: the floating Agent Office window still behaved too much like a wide app window. The `记录` control was isolated in a right-side rail, the closed activity rail reserved horizontal space, the default popover height left too much empty space below the office scene, clicking outside the popover did not dismiss it, and the menu bar template icon was drawn with too much transparent padding so it looked too small.
+- Solution: moved `记录` into the top toolbar immediately to the right of the Settings button, removed the closed rail from layout flow, reduced the popover height to 620px with a smaller minimum height, added delayed focus-loss auto-hide for the Tauri window, and enlarged the generated transparent template icon artwork within its 32px canvas.
+- Verification: `pnpm build` passed, `cargo check` passed, Playwright at 1040x620 showed `记录` beside Settings and only an 18px bottom canvas gap, `pnpm tauri build` generated the release app and `.dmg`, the rebuilt app was installed to `/Applications/Agent Office.app`, and `curl http://127.0.0.1:47391/health` returned `{"ok":true}`.
+- Avoid next time: popover-style menu bar windows should be sized around content, hide on blur, and keep all primary controls in the header instead of reserving persistent side rails for collapsed actions.
+
 ## Manual Acceptance Steps
 
 1. Install Rust so `cargo` is available.
