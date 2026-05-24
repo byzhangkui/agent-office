@@ -2,20 +2,34 @@ import {
   RefreshCw,
   Activity,
   ScrollText,
+  Settings,
+  X,
+  Link2,
+  Link2Off,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { OfficeCanvas } from "./OfficeCanvas";
 import "./app.css";
 import { useTauriBridge } from "./useTauriBridge";
 import { useOfficeStore } from "./store";
-import type { BridgeLogItem } from "./types";
+import {
+  fetchCodexHookSettings,
+  listenForOpenSettings,
+  registerCodexHooks,
+  unregisterCodexHooks,
+} from "./tauriBridge";
+import type { BridgeLogItem, CodexHookSettings } from "./types";
 
 type ActivityView = "events" | "logs";
+const beijingTimeZone = "Asia/Shanghai";
 
 export default function App(): JSX.Element {
   useTauriBridge();
   const [activityView, setActivityView] = useState<ActivityView>("logs");
   const [activityOpen, setActivityOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const agents = useOfficeStore((state) => state.agents);
   const eventLog = useOfficeStore((state) => state.eventLog);
@@ -27,6 +41,26 @@ export default function App(): JSX.Element {
   const activeCount = agents.filter((agent) => agent.status === "working").length;
   const blockedCount = agents.filter((agent) => agent.status === "blocked" || agent.status === "waiting").length;
   const idleCount = agents.length - activeCount - blockedCount;
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    void listenForOpenSettings({
+      onOpen: () => setSettingsOpen(true),
+    }).then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten();
+        return;
+      }
+      unlisten = nextUnlisten;
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   return (
     <main className={`app-shell ${activityOpen ? "activity-open" : "activity-closed"}`}>
@@ -44,6 +78,9 @@ export default function App(): JSX.Element {
             <span className={`bridge-pill bridge-${bridgeStatus}`}>
               {formatBridgeStatus({ status: bridgeStatus })}
             </span>
+            <button className="mini-icon-button" type="button" onClick={() => setSettingsOpen(true)} title="设置" aria-label="设置">
+              <Settings size={15} />
+            </button>
           </div>
         </header>
 
@@ -103,7 +140,142 @@ export default function App(): JSX.Element {
         </section>
         ) : undefined}
       </aside>
+      {settingsOpen ? <SettingsPanel onClose={() => setSettingsOpen(false)} /> : undefined}
     </main>
+  );
+}
+
+function SettingsPanel(params: { onClose: () => void }): JSX.Element {
+  const [settings, setSettings] = useState<CodexHookSettings | undefined>(undefined);
+  const [busy, setBusy] = useState<"register" | "unregister" | "refresh" | undefined>("refresh");
+  const [message, setMessage] = useState<string | undefined>(undefined);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  const loadSettings = useCallback(async () => {
+    setBusy("refresh");
+    setError(undefined);
+    const result = await fetchCodexHookSettings();
+    if (result.ok) {
+      setSettings(result.settings);
+    } else {
+      setError(result.error);
+    }
+    setBusy(undefined);
+  }, []);
+
+  useEffect(() => {
+    void loadSettings();
+  }, [loadSettings]);
+
+  const runRegister = async (): Promise<void> => {
+    setBusy("register");
+    setError(undefined);
+    setMessage(undefined);
+    const result = await registerCodexHooks();
+    if (result.ok) {
+      setSettings(result.result.settings);
+      setMessage(result.result.message);
+    } else {
+      setError(result.error);
+    }
+    setBusy(undefined);
+  };
+
+  const runUnregister = async (): Promise<void> => {
+    setBusy("unregister");
+    setError(undefined);
+    setMessage(undefined);
+    const result = await unregisterCodexHooks();
+    if (result.ok) {
+      setSettings(result.result.settings);
+      setMessage(result.result.message);
+    } else {
+      setError(result.error);
+    }
+    setBusy(undefined);
+  };
+
+  return (
+    <div className="settings-backdrop" role="presentation">
+      <section className="settings-panel" aria-label="设置">
+        <header className="settings-header">
+          <div className="section-title">
+            <Settings size={18} />
+            <h2>设置</h2>
+          </div>
+          <button className="mini-icon-button" type="button" onClick={params.onClose} title="关闭" aria-label="关闭">
+            <X size={15} />
+          </button>
+        </header>
+
+        <div className="settings-status-line">
+          {settings === undefined ? (
+            <span className="status status-neutral">读取中</span>
+          ) : settings.installed ? (
+            <span className="status status-active"><CheckCircle2 size={14} /> 已注册</span>
+          ) : (
+            <span className="status status-warning"><AlertTriangle size={14} /> 未完整注册</span>
+          )}
+          {message === undefined ? undefined : <span className="settings-message">{message}</span>}
+        </div>
+
+        {error === undefined ? undefined : <p className="bridge-error">{error}</p>}
+
+        <div className="settings-actions">
+          <button className="settings-action primary" type="button" disabled={busy !== undefined} onClick={() => void runRegister()}>
+            <Link2 size={16} />
+            <span>{busy === "register" ? "注册中" : "注册 hooks"}</span>
+          </button>
+          <button className="settings-action" type="button" disabled={busy !== undefined || settings?.registeredEvents.length === 0} onClick={() => void runUnregister()}>
+            <Link2Off size={16} />
+            <span>{busy === "unregister" ? "取消中" : "取消注册"}</span>
+          </button>
+          <button className="mini-icon-button" type="button" disabled={busy !== undefined} onClick={() => void loadSettings()} title="刷新" aria-label="刷新">
+            <RefreshCw size={14} />
+          </button>
+        </div>
+
+        {settings === undefined ? undefined : (
+          <div className="settings-grid">
+            <SettingsRow label="Codex hooks" value={settings.hooksEnabled ? "开启" : "关闭"} tone={settings.hooksEnabled ? "active" : "danger"} />
+            <SettingsRow label="Plugin hooks" value={settings.pluginHooksEnabled ? "开启" : "关闭"} tone={settings.pluginHooksEnabled ? "active" : "warning"} />
+            <SettingsRow label="事件" value={`${settings.registeredEvents.length}/${settings.registeredEvents.length + settings.missingEvents.length}`} tone={settings.missingEvents.length === 0 ? "active" : "warning"} />
+            <SettingsRow label="Adapter" value={settings.adapterExists ? "存在" : "缺失"} tone={settings.adapterExists ? "active" : "danger"} />
+            <PathRow label="Codex home" value={settings.codexHome} />
+            <PathRow label="hooks.json" value={settings.hooksPath} />
+            <PathRow label="config.toml" value={settings.configPath} />
+            <PathRow label="Adapter path" value={settings.adapterPath} />
+            {settings.missingEvents.length === 0 ? undefined : (
+              <PathRow label="缺失事件" value={settings.missingEvents.join(", ")} />
+            )}
+            {settings.lastErrorLog === undefined ? undefined : (
+              <div className="settings-log">
+                <span>Adapter errors</span>
+                <pre>{formatAdapterErrorLog({ text: settings.lastErrorLog })}</pre>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function SettingsRow(params: { label: string; value: string; tone: "active" | "warning" | "danger" }): JSX.Element {
+  return (
+    <div className="settings-row">
+      <span>{params.label}</span>
+      <strong className={`status status-${params.tone}`}>{params.value}</strong>
+    </div>
+  );
+}
+
+function PathRow(params: { label: string; value: string }): JSX.Element {
+  return (
+    <div className="settings-row settings-path-row">
+      <span>{params.label}</span>
+      <code>{params.value}</code>
+    </div>
   );
 }
 
@@ -147,9 +319,40 @@ function formatDetails(params: { details: Record<string, unknown> }): string | u
 }
 
 function formatClock(params: { iso: string }): string {
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: beijingTimeZone,
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
+    hourCycle: "h23",
   }).format(new Date(params.iso));
+}
+
+function formatAdapterErrorLog(params: { text: string }): string {
+  return params.text
+    .split("\n")
+    .map((line) => line.replace(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)(\s+)/, (_match, iso: string, whitespace: string) => {
+      return `${formatBeijingDateTime({ iso })} ${beijingTimeZone}${whitespace}`;
+    }))
+    .join("\n");
+}
+
+function formatBeijingDateTime(params: { iso: string }): string {
+  const date = new Date(params.iso);
+  if (Number.isNaN(date.getTime())) {
+    return params.iso;
+  }
+  const parts = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: beijingTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const milliseconds = String(date.getUTCMilliseconds()).padStart(3, "0");
+  return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}:${values.second}.${milliseconds}`;
 }

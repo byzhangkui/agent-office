@@ -284,13 +284,29 @@ function writeCodexHookSuccess() {
 async function logAdapterError(params) {
   const logDir = path.join(agentOfficeStateDir(), "logs");
   const logPath = path.join(logDir, "hook-errors.log");
-  const line = `${new Date().toISOString()} ${params.message}\n`;
+  const line = `${formatBeijingTimestamp({ date: new Date() })} ${params.message}\n`;
   try {
     await fs.mkdir(logDir, { recursive: true });
     await fs.appendFile(logPath, line, "utf8");
   } catch {
     return;
   }
+}
+
+function formatBeijingTimestamp(params) {
+  const parts = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(params.date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const millisecond = String(params.date.getUTCMilliseconds()).padStart(3, "0");
+  return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}:${values.second}.${millisecond} Asia/Shanghai`;
 }
 
 function isRecord(params) {
