@@ -65,9 +65,13 @@ The Node SSE bridge has been removed from the runtime design.
 - `pnpm hook:install:codex:dry-run`: generated hook entries pointing to `packages/hook-adapter/src/codex-hook-adapter.mjs`.
 - `pnpm --filter @agent-office/desktop exec tauri --version`: returned `tauri-cli 2.11.2`.
 
-## Not Verified
+## 2026-05-24 Tauri Startup Fix
 
-- `pnpm tauri dev` and Rust compilation were not run because `cargo` is not available in the current shell.
+- Commit: `a39bf47` (`Fix Tauri desktop startup`).
+- Problem: `pnpm tauri dev` failed during Rust compilation. `tauri::generate_context!()` could not find `apps/desktop/src-tauri/icons/icon.png`, and `app.manage(state)` failed because the `tauri::Manager` trait was not imported.
+- Solution: added the missing `Manager` import, added a deterministic app icon source at `apps/desktop/src-tauri/icons/icon.svg`, generated the required `icon.png`, and committed the generated `Cargo.lock` so Rust dependency resolution is reproducible.
+- Verification: `pnpm build` completed successfully, `pnpm tauri dev` compiled and launched `target/debug/agent-office`, and `curl http://127.0.0.1:47391/health` returned `{"ok":true}`.
+- Avoid next time: keep a Tauri icon asset in `src-tauri/icons/`, commit `Cargo.lock` for desktop apps, and run `pnpm tauri dev` before handing off Tauri changes.
 
 ## Manual Acceptance Steps
 
