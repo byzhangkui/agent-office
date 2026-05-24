@@ -81,6 +81,14 @@ The Node SSE bridge has been removed from the runtime design.
 - Verification: `pnpm build` passed, `cargo check` passed, `pnpm tauri dev` launched the app, `curl http://127.0.0.1:47391/health` returned `{"ok":true}`, and `pnpm hook:codex:test` completed without adapter errors.
 - Avoid next time: hook-related UI should expose both `hooks.json` registration state and Codex feature flags, because either side can prevent events from being delivered.
 
+## 2026-05-25 Menu Bar Packaging Fixes
+
+- Commit: `84dd8bb` (`Add menu bar popover packaging fixes`).
+- Problem: the packaged `.dmg` showed the default macOS app placeholder icon because `bundle.icon` was empty. The menu bar item reused the full app icon, so it appeared as a black rounded-square status item. Adapter error logs also displayed UTC ISO timestamps such as `2026-05-24T16:16:32.135Z`, which was not the desired Beijing time display.
+- Solution: generated and configured the Tauri bundle icon set, added a separate transparent macOS template icon for the menu bar, changed left-click on the menu bar item to toggle a hidden floating Agent Office window, made the app use accessory activation on macOS, and formatted adapter errors/settings logs in `Asia/Shanghai`.
+- Verification: `pnpm build` passed, `cargo check` passed, `pnpm tauri build` generated `Agent Office.app` and `Agent Office_0.1.0_aarch64.dmg`, `Info.plist` includes `CFBundleIconFile = icon.icns`, the app bundle contains `Contents/Resources/icon.icns`, and a temporary hook-adapter error log wrote `2026-05-25 00:23:54.888 Asia/Shanghai ...`.
+- Avoid next time: keep Tauri `bundle.icon` wired to committed generated icon assets, use a dedicated template icon for status bar/menu bar UI instead of the app icon, and localize human-facing log timestamps at the point they are displayed or written.
+
 ## Manual Acceptance Steps
 
 1. Install Rust so `cargo` is available.
