@@ -15,7 +15,7 @@ use std::{
     thread,
     time::Duration,
 };
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 const CODEX_SOURCE_AGENT_ID: &str = "codex";
 const CODEX_IDENTITY_KEY: &str = "codex";
