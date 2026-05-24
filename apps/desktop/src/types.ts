@@ -94,6 +94,29 @@ export interface BridgeLogItem {
   details: Record<string, unknown>;
 }
 
+export interface CodexHookSettings {
+  codexHome: string;
+  configPath: string;
+  hooksPath: string;
+  adapterPath: string;
+  errorLogPath: string;
+  adapterExists: boolean;
+  configExists: boolean;
+  hooksFileExists: boolean;
+  hooksEnabled: boolean;
+  pluginHooksEnabled: boolean;
+  registeredEvents: string[];
+  missingEvents: string[];
+  installed: boolean;
+  restartRequired: boolean;
+  lastErrorLog: string | undefined;
+}
+
+export interface CodexHookOperationResult {
+  settings: CodexHookSettings;
+  message: string;
+}
+
 export interface HookParseSuccess {
   ok: true;
   event: AgentHookEvent;
