@@ -16,9 +16,10 @@ use std::{
     time::Duration,
 };
 use tauri::{
+    image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, State, WindowEvent,
+    AppHandle, Emitter, Manager, PhysicalPosition, Rect, State, WebviewWindow, WindowEvent,
 };
 use toml_edit::{value as toml_value, DocumentMut, Item, Table};
 
@@ -35,6 +36,7 @@ const TRAY_ID: &str = "agent-office";
 const TRAY_MENU_SHOW_ID: &str = "show";
 const TRAY_MENU_SETTINGS_ID: &str = "settings";
 const TRAY_MENU_QUIT_ID: &str = "quit";
+const POPOVER_MARGIN: f64 = 8.0;
 const CODEX_HOOK_EVENTS: &[&str] = &[
     "SessionStart",
     "UserPromptSubmit",
@@ -186,6 +188,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             setup_status_bar(app.handle()).map_err(to_boxed_error)?;
             setup_close_to_hide(app.handle());
             let token = load_or_create_hook_token().map_err(to_boxed_error)?;
@@ -230,37 +234,60 @@ fn setup_status_bar(app: &AppHandle) -> Result<(), String> {
         .map_err(|error| format!("cannot create tray quit menu item: {error}"))?;
     let menu = Menu::with_items(app, &[&show_item, &settings_item, &separator, &quit_item])
         .map_err(|error| format!("cannot create tray menu: {error}"))?;
-    let icon = app
-        .default_window_icon()
-        .cloned()
-        .ok_or_else(|| "cannot create tray icon: default window icon is missing".to_string())?;
-
     TrayIconBuilder::with_id(TRAY_ID)
-        .icon(icon)
+        .icon(create_tray_template_icon())
+        .icon_as_template(true)
         .tooltip("Agent Office")
         .menu(&menu)
-        .show_menu_on_left_click(true)
+        .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             TRAY_MENU_SHOW_ID => show_main_window(app),
             TRAY_MENU_SETTINGS_ID => open_settings_window(app),
             TRAY_MENU_QUIT_ID => app.exit(0),
             _ => {}
         })
-        .on_tray_icon_event(|tray, event| {
-            if matches!(
-                event,
-                TrayIconEvent::Click {
-                    button: MouseButton::Left,
-                    button_state: MouseButtonState::Up,
-                    ..
-                }
-            ) {
-                show_main_window(tray.app_handle());
+        .on_tray_icon_event(|tray, event| match event {
+            TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                rect,
+                ..
+            } => {
+                toggle_main_window_from_tray(tray.app_handle(), rect);
             }
+            _ => {}
         })
         .build(app)
         .map_err(|error| format!("cannot build tray icon: {error}"))?;
     Ok(())
+}
+
+fn create_tray_template_icon() -> Image<'static> {
+    const SIZE: u32 = 32;
+    let mut rgba = vec![0; (SIZE * SIZE * 4) as usize];
+    draw_rect(&mut rgba, SIZE, 7, 7, 18, 2);
+    draw_rect(&mut rgba, SIZE, 7, 7, 2, 14);
+    draw_rect(&mut rgba, SIZE, 23, 7, 2, 14);
+    draw_rect(&mut rgba, SIZE, 7, 19, 18, 2);
+    draw_rect(&mut rgba, SIZE, 10, 10, 4, 3);
+    draw_rect(&mut rgba, SIZE, 16, 10, 6, 2);
+    draw_rect(&mut rgba, SIZE, 16, 14, 6, 2);
+    draw_rect(&mut rgba, SIZE, 10, 17, 12, 2);
+    draw_rect(&mut rgba, SIZE, 15, 21, 2, 4);
+    draw_rect(&mut rgba, SIZE, 11, 25, 10, 2);
+    Image::new_owned(rgba, SIZE, SIZE)
+}
+
+fn draw_rect(rgba: &mut [u8], canvas_width: u32, x: u32, y: u32, width: u32, height: u32) {
+    for row in y..y + height {
+        for column in x..x + width {
+            let index = ((row * canvas_width + column) * 4) as usize;
+            rgba[index] = 0;
+            rgba[index + 1] = 0;
+            rgba[index + 2] = 0;
+            rgba[index + 3] = 255;
+        }
+    }
 }
 
 fn setup_close_to_hide(app: &AppHandle) {
@@ -277,15 +304,75 @@ fn setup_close_to_hide(app: &AppHandle) {
 
 fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
+        show_floating_window(&window);
     }
 }
 
 fn open_settings_window(app: &AppHandle) {
     show_main_window(app);
     let _ = app.emit(SETTINGS_EVENT_NAME, json!({}));
+}
+
+fn toggle_main_window_from_tray(app: &AppHandle, tray_rect: Rect) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+
+    if matches!(window.is_visible(), Ok(true)) {
+        let _ = window.hide();
+        return;
+    }
+
+    let _ = position_window_near_tray(&window, tray_rect);
+    show_floating_window(&window);
+}
+
+fn show_floating_window(window: &WebviewWindow) {
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+fn position_window_near_tray(window: &WebviewWindow, tray_rect: Rect) -> Result<(), String> {
+    let tray_position = tray_rect.position.to_physical::<f64>(1.0);
+    let tray_size = tray_rect.size.to_physical::<f64>(1.0);
+    let window_size = window
+        .outer_size()
+        .or_else(|_| window.inner_size())
+        .map_err(|error| format!("cannot read Agent Office window size: {error}"))?;
+    let monitor = window
+        .monitor_from_point(tray_position.x, tray_position.y)
+        .map_err(|error| format!("cannot read monitor at tray position: {error}"))?
+        .or_else(|| window.current_monitor().ok().flatten())
+        .or_else(|| window.primary_monitor().ok().flatten());
+
+    let Some(monitor) = monitor else {
+        return Ok(());
+    };
+
+    let work_area = monitor.work_area();
+    let work_x = f64::from(work_area.position.x);
+    let work_y = f64::from(work_area.position.y);
+    let work_width = f64::from(work_area.size.width);
+    let work_height = f64::from(work_area.size.height);
+    let window_width = f64::from(window_size.width);
+    let window_height = f64::from(window_size.height);
+    let tray_center_x = tray_position.x + tray_size.width / 2.0;
+
+    let max_x = work_x + (work_width - window_width).max(0.0);
+    let max_y = work_y + (work_height - window_height).max(0.0);
+    let x = (tray_center_x - window_width / 2.0).clamp(work_x, max_x);
+    let below_tray_y = tray_position.y + tray_size.height + POPOVER_MARGIN;
+    let above_tray_y = tray_position.y - window_height - POPOVER_MARGIN;
+    let y = if below_tray_y + window_height <= work_y + work_height {
+        below_tray_y.max(work_y)
+    } else {
+        above_tray_y.clamp(work_y, max_y)
+    };
+
+    window
+        .set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32))
+        .map_err(|error| format!("cannot position Agent Office window: {error}"))
 }
 
 fn start_hook_server(app: AppHandle, state: Arc<HookServerState>, listener: TcpListener) {

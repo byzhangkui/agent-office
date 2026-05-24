@@ -23,6 +23,7 @@ import {
 import type { BridgeLogItem, CodexHookSettings } from "./types";
 
 type ActivityView = "events" | "logs";
+const beijingTimeZone = "Asia/Shanghai";
 
 export default function App(): JSX.Element {
   useTauriBridge();
@@ -250,7 +251,7 @@ function SettingsPanel(params: { onClose: () => void }): JSX.Element {
             {settings.lastErrorLog === undefined ? undefined : (
               <div className="settings-log">
                 <span>Adapter errors</span>
-                <pre>{settings.lastErrorLog}</pre>
+                <pre>{formatAdapterErrorLog({ text: settings.lastErrorLog })}</pre>
               </div>
             )}
           </div>
@@ -318,9 +319,40 @@ function formatDetails(params: { details: Record<string, unknown> }): string | u
 }
 
 function formatClock(params: { iso: string }): string {
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: beijingTimeZone,
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
+    hourCycle: "h23",
   }).format(new Date(params.iso));
+}
+
+function formatAdapterErrorLog(params: { text: string }): string {
+  return params.text
+    .split("\n")
+    .map((line) => line.replace(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)(\s+)/, (_match, iso: string, whitespace: string) => {
+      return `${formatBeijingDateTime({ iso })} ${beijingTimeZone}${whitespace}`;
+    }))
+    .join("\n");
+}
+
+function formatBeijingDateTime(params: { iso: string }): string {
+  const date = new Date(params.iso);
+  if (Number.isNaN(date.getTime())) {
+    return params.iso;
+  }
+  const parts = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: beijingTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const milliseconds = String(date.getUTCMilliseconds()).padStart(3, "0");
+  return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}:${values.second}.${milliseconds}`;
 }
