@@ -8,7 +8,7 @@
 - Codex hook adapter: `packages/hook-adapter`.
 - Shared protocol defaults: `packages/protocol`.
 - Runtime config file: none. `config/office.json` has been removed.
-- Agent source id: `codex`.
+- Agent source ids: `codex`, `claude`.
 - Hook ingress: Tauri Rust backend at `127.0.0.1:47391`.
 - Frontend/backend link: Tauri commands and events.
 
@@ -51,6 +51,21 @@ The Node SSE bridge has been removed from the runtime design.
   - emits events/logs to the frontend
 - Updated fixtures to safe sample paths and sample task text.
 - Rewrote README for the monorepo/Tauri-first architecture.
+
+## Claude Code Support
+
+- Generalized the identity envelope in event `details` to neutral keys: `agentSourceId`, `agentSessionId`, `agentIdentityKey` (was `codex*`). Both adapters write them; the Rust backend and frontend read them.
+- Added `packages/protocol` exports: `claudeSourceAgentId`, `claudeIdentityKey`, `defaultClaudeProfile`, the neutral detail-key constants, and `officeAgentSources`.
+- Added `packages/hook-adapter/src/claude-hook-adapter.mjs` mapping Claude hook events (`UserPromptSubmit`, `Notification`, `Stop`, `SubagentStop`, `SessionStart`, `PreCompact`) to office events.
+- Added `packages/hook-adapter/src/install-claude-hooks.mjs` that merges hooks into `~/.claude/settings.json` (Claude's `hooks` shape, distinct from Codex's `hooks.json`).
+- Rust validation is now source-agnostic: `KNOWN_AGENT_SOURCES` accepts `codex` and `claude`.
+- Frontend renders `defaultClaudeProfile` (desk-2, color `#c96442`) and resolves session agents for any known source.
+- Added `fixtures/claude/*.json` and `hook:claude:test` / `hook:install:claude(:dry-run)` scripts.
+
+## Launch Fixes
+
+- `apps/desktop/src-tauri/src/lib.rs`: imported `tauri::Manager` so `app.manage(state)` resolves.
+- Generated `apps/desktop/src-tauri/icons/*` (was missing) and populated `bundle.icon` in `tauri.conf.json`; `generate_context!` requires an icon.
 
 ## Verification
 

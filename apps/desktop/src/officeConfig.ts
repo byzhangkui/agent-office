@@ -1,23 +1,25 @@
-import { codexSourceAgentId, defaultCodexProfile } from "@agent-office/protocol";
+import {
+  agentSessionIdDetailKey,
+  agentSourceIdDetailKey,
+  defaultClaudeProfile,
+  defaultCodexProfile,
+} from "@agent-office/protocol";
 import { officeZones } from "./officeLayout";
 import type { Agent, AgentHookEvent, AgentProfile } from "./types";
 
-/** Built-in real agent source profiles for the current Codex-only desktop app. */
-export const officeAgentProfiles: AgentProfile[] = [defaultCodexProfile];
+/** Built-in real agent source profiles the desktop app can render. */
+export const officeAgentProfiles: AgentProfile[] = [defaultCodexProfile, defaultClaudeProfile];
 
-/** Resolves the visual profile for a hook event, including Codex session agents. */
+/** Resolves the visual profile for a hook event, including per-source session agents. */
 export function resolveAgentProfileForEvent(params: { event: AgentHookEvent; existingAgents: Agent[] }): AgentProfile | undefined {
   const configuredProfile = officeAgentProfiles.find((profile) => profile.id === params.event.agentId);
   if (configuredProfile !== undefined) {
     return configuredProfile;
   }
 
-  const sourceAgentId = readOptionalStringFromRecord({ source: params.event.details, key: "codexSourceAgentId" });
-  const sessionId = readOptionalStringFromRecord({ source: params.event.details, key: "codexSessionId" });
+  const sourceAgentId = readOptionalStringFromRecord({ source: params.event.details, key: agentSourceIdDetailKey });
+  const sessionId = readOptionalStringFromRecord({ source: params.event.details, key: agentSessionIdDetailKey });
   if (sourceAgentId === undefined || sessionId === undefined) {
-    return undefined;
-  }
-  if (sourceAgentId !== codexSourceAgentId) {
     return undefined;
   }
 

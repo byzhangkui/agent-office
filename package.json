@@ -11,6 +11,9 @@
     "tauri": "pnpm --filter @agent-office/desktop tauri",
     "hook:codex:test": "pnpm --filter @agent-office/hook-adapter codex:test",
     "hook:install:codex:dry-run": "pnpm --filter @agent-office/hook-adapter install:codex:dry-run",
-    "hook:install:codex": "pnpm --filter @agent-office/hook-adapter install:codex"
+    "hook:install:codex": "pnpm --filter @agent-office/hook-adapter install:codex",
+    "hook:claude:test": "pnpm --filter @agent-office/hook-adapter claude:test",
+    "hook:install:claude:dry-run": "pnpm --filter @agent-office/hook-adapter install:claude:dry-run",
+    "hook:install:claude": "pnpm --filter @agent-office/hook-adapter install:claude"
   }
 }

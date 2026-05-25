@@ -1,0 +1,7 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000002",
+  "transcript_path": "/tmp/agent-office-example/transcript.jsonl",
+  "cwd": "/tmp/agent-office-example/workspace",
+  "hook_event_name": "Notification",
+  "message": "Claude needs your permission to run a tool"
+}

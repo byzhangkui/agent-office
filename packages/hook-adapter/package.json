@@ -6,7 +6,10 @@
   "scripts": {
     "codex:test": "node src/codex-hook-adapter.mjs < ../../fixtures/codex/codex-user-prompt-submit.json",
     "install:codex:dry-run": "node src/install-codex-hooks.mjs --codex-home \"$HOME/.codex\" --adapter src/codex-hook-adapter.mjs --dry-run",
-    "install:codex": "node src/install-codex-hooks.mjs --codex-home \"$HOME/.codex\" --adapter src/codex-hook-adapter.mjs"
+    "install:codex": "node src/install-codex-hooks.mjs --codex-home \"$HOME/.codex\" --adapter src/codex-hook-adapter.mjs",
+    "claude:test": "node src/claude-hook-adapter.mjs < ../../fixtures/claude/claude-user-prompt-submit.json",
+    "install:claude:dry-run": "node src/install-claude-hooks.mjs --claude-home \"$HOME/.claude\" --adapter src/claude-hook-adapter.mjs --dry-run",
+    "install:claude": "node src/install-claude-hooks.mjs --claude-home \"$HOME/.claude\" --adapter src/claude-hook-adapter.mjs"
   },
   "dependencies": {
     "@agent-office/protocol": "workspace:*"

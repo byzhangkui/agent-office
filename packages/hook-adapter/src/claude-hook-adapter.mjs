@@ -6,36 +6,36 @@ import {
   agentIdentityDetailKey,
   agentSessionIdDetailKey,
   agentSourceIdDetailKey,
-  codexIdentityKey,
-  codexSourceAgentId,
+  claudeIdentityKey,
+  claudeSourceAgentId,
   hookServerUrl,
 } from "@agent-office/protocol";
 
 const inputResult = await readStdin({ maxBytes: 1024 * 1024 });
 if (!inputResult.ok) {
   await logAdapterError({ message: inputResult.error });
-  writeCodexHookSuccess();
+  writeClaudeHookSuccess();
   process.exit(0);
 }
 
-const inputParseResult = parseCodexHookInput({ text: inputResult.text });
+const inputParseResult = parseClaudeHookInput({ text: inputResult.text });
 if (!inputParseResult.ok) {
   await logAdapterError({ message: inputParseResult.error });
-  writeCodexHookSuccess();
+  writeClaudeHookSuccess();
   process.exit(0);
 }
 
-const eventResult = mapCodexHookToOfficeEvent({ input: inputParseResult.input });
+const eventResult = mapClaudeHookToOfficeEvent({ input: inputParseResult.input });
 if (!eventResult.ok) {
   await logAdapterError({ message: eventResult.error });
-  writeCodexHookSuccess();
+  writeClaudeHookSuccess();
   process.exit(0);
 }
 
 const tokenResult = await readHookToken();
 if (!tokenResult.ok) {
   await logAdapterError({ message: tokenResult.error });
-  writeCodexHookSuccess();
+  writeClaudeHookSuccess();
   process.exit(0);
 }
 
@@ -47,7 +47,7 @@ if (!postResult.ok) {
   await logAdapterError({ message: postResult.error });
 }
 
-writeCodexHookSuccess();
+writeClaudeHookSuccess();
 
 function readStdin(params) {
   return new Promise((resolve) => {
@@ -57,7 +57,7 @@ function readStdin(params) {
     process.stdin.on("data", (chunk) => {
       received += chunk.length;
       if (received > params.maxBytes) {
-        resolve({ ok: false, error: "Codex hook input exceeded 1 MiB" });
+        resolve({ ok: false, error: "Claude hook input exceeded 1 MiB" });
         process.stdin.destroy();
         return;
       }
@@ -74,24 +74,24 @@ function readStdin(params) {
   });
 }
 
-function parseCodexHookInput(params) {
+function parseClaudeHookInput(params) {
   let value;
   try {
     value = JSON.parse(params.text);
   } catch (error) {
-    return { ok: false, error: `Codex hook input is not valid JSON: ${error.message}` };
+    return { ok: false, error: `Claude hook input is not valid JSON: ${error.message}` };
   }
 
   if (!isRecord({ value })) {
-    return { ok: false, error: "Codex hook input must be a JSON object" };
+    return { ok: false, error: "Claude hook input must be a JSON object" };
   }
   if (typeof value.hook_event_name !== "string" || value.hook_event_name.trim().length === 0) {
-    return { ok: false, error: "Codex hook input requires string field hook_event_name" };
+    return { ok: false, error: "Claude hook input requires string field hook_event_name" };
   }
 
   const workspace = readWorkspace({ input: value });
   if (workspace === undefined) {
-    return { ok: false, error: "Codex hook input requires cwd" };
+    return { ok: false, error: "Claude hook input requires cwd" };
   }
 
   return { ok: true, input: { ...value, workspace } };
@@ -104,15 +104,15 @@ function readWorkspace(params) {
   return undefined;
 }
 
-function mapCodexHookToOfficeEvent(params) {
-  const officeEvent = mapOfficeEventName({ codexEventName: params.input.hook_event_name });
+function mapClaudeHookToOfficeEvent(params) {
+  const officeEvent = mapOfficeEventName({ claudeEventName: params.input.hook_event_name });
   if (officeEvent === undefined) {
-    return { ok: false, error: `Unsupported Codex hook event: ${params.input.hook_event_name}` };
+    return { ok: false, error: `Unsupported Claude hook event: ${params.input.hook_event_name}` };
   }
 
   const sessionId = readOptionalString({ source: params.input, key: "session_id" });
   if (sessionId === undefined) {
-    return { ok: false, error: "Codex hook input requires session_id for session visualization" };
+    return { ok: false, error: "Claude hook input requires session_id for session visualization" };
   }
 
   const identity = selectAgentIdentity({
@@ -136,40 +136,37 @@ function mapCodexHookToOfficeEvent(params) {
 }
 
 function mapOfficeEventName(params) {
-  if (params.codexEventName === "UserPromptSubmit" || params.codexEventName === "SubagentStart") {
+  if (params.claudeEventName === "UserPromptSubmit") {
     return "task_started";
   }
-  if (params.codexEventName === "Stop" || params.codexEventName === "SubagentStop") {
+  if (params.claudeEventName === "Stop" || params.claudeEventName === "SubagentStop") {
     return "task_completed";
   }
-  if (params.codexEventName === "PermissionRequest") {
+  if (params.claudeEventName === "Notification") {
     return "user_input_required";
   }
-  if (params.codexEventName === "SessionStart" || params.codexEventName === "PostCompact") {
+  if (params.claudeEventName === "SessionStart") {
     return "agent_idle";
   }
-  if (params.codexEventName === "PreCompact") {
+  if (params.claudeEventName === "PreCompact") {
     return "task_blocked";
   }
   return undefined;
 }
 
 function selectAgentIdentity(params) {
-  const codexAgentId = readOptionalString({ source: params.input, key: "agent_id" });
-  const isSubagent = params.input.hook_event_name === "SubagentStart"
-    || params.input.hook_event_name === "SubagentStop"
-    || codexAgentId !== undefined;
+  const isSubagent = params.input.hook_event_name === "SubagentStop";
 
   return {
     agentId: createSessionAgentId({
-      sourceAgentId: codexSourceAgentId,
+      sourceAgentId: claudeSourceAgentId,
       sessionId: params.sessionId,
-      identityKey: codexIdentityKey,
+      identityKey: claudeIdentityKey,
     }),
-    sourceAgentId: codexSourceAgentId,
+    sourceAgentId: claudeSourceAgentId,
     sessionId: params.sessionId,
-    identityKey: codexIdentityKey,
-    codexAgentKind: isSubagent ? "subagent" : "main",
+    identityKey: claudeIdentityKey,
+    claudeAgentKind: isSubagent ? "subagent" : "main",
   };
 }
 
@@ -186,22 +183,19 @@ function createTitle(params) {
   if (params.input.hook_event_name === "UserPromptSubmit" && typeof params.input.prompt === "string" && params.input.prompt.trim().length > 0) {
     return truncate({ value: params.input.prompt.trim(), maxLength: 96 });
   }
-  if (params.input.hook_event_name === "PermissionRequest" && typeof params.input.tool_name === "string") {
-    return `需要授权: ${params.input.tool_name}`;
-  }
-  if ((params.input.hook_event_name === "Stop" || params.input.hook_event_name === "SubagentStop") && typeof params.input.last_assistant_message === "string" && params.input.last_assistant_message.trim().length > 0) {
-    return truncate({ value: params.input.last_assistant_message.trim(), maxLength: 96 });
+  if (params.input.hook_event_name === "Notification" && typeof params.input.message === "string" && params.input.message.trim().length > 0) {
+    return truncate({ value: params.input.message.trim(), maxLength: 96 });
   }
   if (params.input.hook_event_name === "SessionStart" && typeof params.input.source === "string") {
-    return `Codex 会话 ${params.input.source}`;
+    return `Claude 会话 ${params.input.source}`;
   }
 
   const labels = {
-    task_started: "Codex 开始任务",
-    task_completed: "Codex 完成任务",
-    task_blocked: "Codex 正在压缩上下文",
-    user_input_required: "Codex 需要授权",
-    agent_idle: "Codex 空闲",
+    task_started: "Claude 开始任务",
+    task_completed: "Claude 完成任务",
+    task_blocked: "Claude 正在压缩上下文",
+    user_input_required: "Claude 需要输入",
+    agent_idle: "Claude 空闲",
   };
   return labels[params.officeEvent];
 }
@@ -211,14 +205,11 @@ function createDetails(params) {
     [agentSourceIdDetailKey]: params.identity.sourceAgentId,
     [agentSessionIdDetailKey]: params.identity.sessionId,
     [agentIdentityDetailKey]: params.identity.identityKey,
-    codexHookEventName: params.input.hook_event_name,
-    codexTurnId: readOptionalString({ source: params.input, key: "turn_id" }),
-    codexAgentId: readOptionalString({ source: params.input, key: "agent_id" }),
-    codexAgentType: readOptionalString({ source: params.input, key: "agent_type" }),
-    codexAgentKind: params.identity.codexAgentKind,
-    model: readOptionalString({ source: params.input, key: "model" }),
+    claudeHookEventName: params.input.hook_event_name,
+    claudeAgentKind: params.identity.claudeAgentKind,
+    claudeTranscriptPath: readOptionalString({ source: params.input, key: "transcript_path" }),
     permissionMode: readOptionalString({ source: params.input, key: "permission_mode" }),
-    toolName: readOptionalString({ source: params.input, key: "tool_name" }),
+    notificationMessage: readOptionalString({ source: params.input, key: "message" }),
   };
 }
 
@@ -281,7 +272,7 @@ function readOptionalString(params) {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
-function writeCodexHookSuccess() {
+function writeClaudeHookSuccess() {
   process.stdout.write(JSON.stringify({ continue: true, suppressOutput: true }));
 }
 

@@ -15,10 +15,12 @@ use std::{
     thread,
     time::Duration,
 };
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
-const CODEX_SOURCE_AGENT_ID: &str = "codex";
-const CODEX_IDENTITY_KEY: &str = "codex";
+// Known real agent sources, each paired with the identity key its adapter
+// signs session agents with. A hook event is accepted only if its identity
+// envelope matches one of these pairs.
+const KNOWN_AGENT_SOURCES: &[(&str, &str)] = &[("codex", "codex"), ("claude", "claude")];
 const HOOK_HOST: &str = "127.0.0.1";
 const HOOK_PORT: u16 = 47391;
 const MAX_HOOK_BODY_BYTES: usize = 65_536;
@@ -315,26 +317,29 @@ fn validate_hook_event(event: &HookEvent) -> Result<(), String> {
     if !event.details.is_object() {
         return Err("hook event details must be an object".to_string());
     }
-    if !is_valid_codex_session_agent(event) {
-        return Err("agentId is not a valid Codex session agent".to_string());
+    if !is_valid_session_agent(event) {
+        return Err("agentId is not a valid agent session identity".to_string());
     }
     Ok(())
 }
 
-fn is_valid_codex_session_agent(event: &HookEvent) -> bool {
+fn is_valid_session_agent(event: &HookEvent) -> bool {
     let Some(details) = event.details.as_object() else {
         return false;
     };
-    let Some(source_agent_id) = details.get("codexSourceAgentId").and_then(Value::as_str) else {
+    let Some(source_agent_id) = details.get("agentSourceId").and_then(Value::as_str) else {
         return false;
     };
-    let Some(session_id) = details.get("codexSessionId").and_then(Value::as_str) else {
+    let Some(session_id) = details.get("agentSessionId").and_then(Value::as_str) else {
         return false;
     };
-    let Some(identity_key) = details.get("codexIdentityKey").and_then(Value::as_str) else {
+    let Some(identity_key) = details.get("agentIdentityKey").and_then(Value::as_str) else {
         return false;
     };
-    if source_agent_id != CODEX_SOURCE_AGENT_ID || identity_key != CODEX_IDENTITY_KEY {
+    let is_known_source = KNOWN_AGENT_SOURCES
+        .iter()
+        .any(|(source, identity)| *source == source_agent_id && *identity == identity_key);
+    if !is_known_source {
         return false;
     }
 
