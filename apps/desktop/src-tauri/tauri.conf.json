@@ -13,10 +13,14 @@
     "windows": [
       {
         "title": "Agent Office",
-        "width": 1280,
-        "height": 820,
+        "width": 1040,
+        "height": 620,
         "minWidth": 1040,
-        "minHeight": 680
+        "minHeight": 560,
+        "visible": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true
       }
     ],
     "security": {

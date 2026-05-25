@@ -15,7 +15,8 @@
 body {
   margin: 0;
   min-width: 960px;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 button {
@@ -24,12 +25,9 @@ button {
 
 .app-shell {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   height: 100vh;
   background: #e9ece0;
-}
-
-.app-shell.activity-closed {
-  grid-template-columns: minmax(0, 1fr) 76px;
 }
 
 .app-shell.activity-open {
@@ -107,6 +105,10 @@ h2 {
   justify-content: flex-end;
 }
 
+.toolbar .mini-icon-button {
+  margin-left: 0;
+}
+
 .bridge-pill {
   min-width: 92px;
   text-align: center;
@@ -138,6 +140,7 @@ h2 {
 .mini-icon-button,
 .activity-toggle,
 .activity-tabs button,
+.settings-action,
 .agent-list-row {
   border: 1px solid #bac3b3;
   background: #ffffff;
@@ -158,10 +161,17 @@ h2 {
 .activity-toggle:hover,
 .activity-tabs button:hover,
 .activity-tabs .selected,
+.settings-action:hover,
 .agent-list-row:hover,
 .agent-list-row.selected {
   background: #263741;
   color: #ffffff;
+}
+
+.mini-icon-button:disabled,
+.settings-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .office-canvas {
@@ -217,25 +227,19 @@ h2 {
 }
 
 .activity-closed .side-panel {
-  padding-right: 18px;
+  display: none;
 }
 
 .activity-toggle {
-  display: grid;
-  place-items: center;
-  grid-template-rows: auto auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   gap: 4px;
-  min-height: 54px;
+  min-height: 28px;
   border-radius: 8px;
-  padding: 7px 6px;
+  padding: 0 10px;
   font-size: 12px;
   font-weight: 700;
-}
-
-.activity-open .activity-toggle {
-  grid-template-columns: auto auto;
-  grid-template-rows: 1fr;
-  justify-content: center;
 }
 
 .agent-list-panel,
@@ -265,6 +269,9 @@ h2 {
 }
 
 .status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   border-radius: 999px;
   padding: 4px 9px;
 }
@@ -461,14 +468,151 @@ h2 {
   font-size: 13px;
 }
 
+.settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(31 41 51 / 0.36);
+}
+
+.settings-panel {
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  gap: 12px;
+  width: min(760px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  border: 1px solid #c8cfbf;
+  border-radius: 8px;
+  background: #f7f5ec;
+  padding: 16px;
+  box-shadow: 0 20px 64px rgb(31 41 51 / 0.24);
+}
+
+.settings-header,
+.settings-status-line,
+.settings-actions,
+.settings-row {
+  display: flex;
+  align-items: center;
+}
+
+.settings-header {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-status-line {
+  gap: 10px;
+  min-height: 28px;
+  flex-wrap: wrap;
+}
+
+.settings-message {
+  color: #4e5b52;
+  font-size: 12px;
+}
+
+.settings-actions {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.settings-action.primary {
+  background: #dff0df;
+  color: #275c34;
+  border-color: #a6c9ad;
+}
+
+.settings-grid {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.settings-row {
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  border: 1px solid #d7dccf;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px 10px;
+}
+
+.settings-row span {
+  flex: 0 0 112px;
+  color: #66715f;
+  font-size: 12px;
+}
+
+.settings-row strong {
+  font-size: 12px;
+}
+
+.settings-path-row {
+  align-items: flex-start;
+}
+
+.settings-path-row code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #29343b;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-align: right;
+}
+
+.settings-log {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #e2aaa3;
+  border-radius: 8px;
+  background: #fff1ef;
+  padding: 10px;
+}
+
+.settings-log span {
+  color: #a33f35;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-log pre {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #3f4941;
+  font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 @media (max-width: 1100px) {
   body {
     min-width: 0;
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
   }
 
   .app-shell {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(560px, 62vh) auto;
     height: auto;
     min-height: 100vh;
   }
