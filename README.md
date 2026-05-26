@@ -45,6 +45,19 @@ Run the desktop app after Rust is installed:
 pnpm tauri dev
 ```
 
+## 下载预构建包（macOS arm64）
+
+GitHub Actions 的 **Build macOS (arm64)** 工作流会产出 `.dmg`（artifact `agent-office-macos-arm64`）。该包是 **ad-hoc 签名、未公证**（没有 Apple Developer ID），所以下载后 macOS Gatekeeper 会拦一次，需要本机放行一次：
+
+- **图形界面**：双击打开被拦后，到 `系统设置 → 隐私与安全性`，点 `仍要打开`。
+- **或命令行**（去掉下载隔离属性）：
+
+  ```bash
+  xattr -dr com.apple.quarantine "/Applications/Agent Office.app"
+  ```
+
+放行一次后即可正常使用。要实现“下载双击即开”需 Apple Developer ID 签名 + 公证。
+
 The desktop app creates a local hook token at `~/.agent-office/hook-token` and starts the hook server on `127.0.0.1:47391`.
 
 ## Codex Hooks

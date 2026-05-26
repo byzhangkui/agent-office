@@ -1,7 +1,9 @@
 name: Build macOS (arm64)
 
 # Builds the Tauri desktop app for Apple Silicon (aarch64-apple-darwin)
-# and uploads the .dmg as a downloadable artifact. The build is unsigned.
+# and uploads the .dmg as a downloadable artifact. The app is ad-hoc signed
+# (no Apple Developer ID): a downloaded build still needs a one-time Gatekeeper
+# bypass — see README ("下载预构建包").
 on:
   workflow_dispatch:
   push:
