@@ -1,0 +1,51 @@
+name: Build macOS (arm64)
+
+# Builds the Tauri desktop app for Apple Silicon (aarch64-apple-darwin)
+# and uploads the .dmg as a downloadable artifact. The build is unsigned.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    # macos-14 runners are native Apple Silicon (arm64).
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.23.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri app (aarch64)
+        run: pnpm tauri build --target aarch64-apple-darwin
+
+      - name: Upload macOS arm64 bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-office-macos-arm64
+          path: apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error

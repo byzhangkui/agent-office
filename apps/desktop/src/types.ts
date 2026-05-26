@@ -16,7 +16,7 @@ export type AgentHookEventName =
   | "user_input_required"
   | "agent_idle";
 
-export type ZoneKind = "desk" | "lounge" | "water" | "restroom" | "walkway";
+export type ZoneKind = "desk" | "lounge" | "water" | "restroom" | "walkway" | "meeting";
 
 export interface Point {
   x: number;

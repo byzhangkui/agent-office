@@ -94,13 +94,13 @@ export function applyHookEventToAgents(params: { agents: Agent[]; event: AgentHo
     }
 
     if (params.event.event === "task_failed" || params.event.event === "task_blocked") {
-      const currentTarget = holdNonWorkingPosition({ agent });
+      const isAtDesk = distanceBetween({ from: agent.position, to: deskPoint }) < 1;
       return {
         ...agent,
-        status: "blocked",
-        arrivalStatus: undefined,
-        targetZoneId: currentTarget.targetZoneId,
-        target: currentTarget.target,
+        status: isAtDesk ? "blocked" : "walking",
+        arrivalStatus: isAtDesk ? undefined : "blocked",
+        targetZoneId: agent.deskId,
+        target: deskPoint,
         taskId: params.event.taskId,
         taskTitle: params.event.title,
         lastTaskTitle: params.event.title ?? agent.lastTaskTitle,
@@ -110,13 +110,13 @@ export function applyHookEventToAgents(params: { agents: Agent[]; event: AgentHo
     }
 
     if (params.event.event === "user_input_required") {
-      const currentTarget = holdNonWorkingPosition({ agent });
+      const isAtDesk = distanceBetween({ from: agent.position, to: deskPoint }) < 1;
       return {
         ...agent,
-        status: "waiting",
-        arrivalStatus: undefined,
-        targetZoneId: currentTarget.targetZoneId,
-        target: currentTarget.target,
+        status: isAtDesk ? "waiting" : "walking",
+        arrivalStatus: isAtDesk ? undefined : "waiting",
+        targetZoneId: agent.deskId,
+        target: deskPoint,
         taskId: params.event.taskId,
         taskTitle: params.event.title,
         lastTaskTitle: params.event.title ?? agent.lastTaskTitle,
@@ -274,14 +274,6 @@ function offsetPoint(params: { point: Point; dx: number; dy: number }): Point {
 
 function isTaskLockedStatus(params: { status: AgentStatus }): boolean {
   return params.status === "working" || params.status === "blocked" || params.status === "waiting";
-}
-
-function holdNonWorkingPosition(params: { agent: Agent }): { targetZoneId: string; target: Point } {
-  const targetZone = getZoneById({ zoneId: params.agent.targetZoneId });
-  if (targetZone?.kind === "desk") {
-    return { targetZoneId: "lounge", target: getZonePoint({ zoneId: "lounge" }) };
-  }
-  return { targetZoneId: params.agent.targetZoneId, target: params.agent.target };
 }
 
 function chooseExternalActivity(params: { agentId: string; now: number }): { status: AgentStatus; zoneId: string } {

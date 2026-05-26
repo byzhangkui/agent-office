@@ -218,6 +218,38 @@ h2 {
   color: #ffffff;
 }
 
+.desk-label-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.desk-label-hit {
+  position: absolute;
+  z-index: 2;
+  pointer-events: auto;
+  cursor: help;
+}
+
+.desk-label-tooltip {
+  position: absolute;
+  z-index: 5;
+  max-width: 240px;
+  transform: translateY(-100%);
+  margin-top: -6px;
+  padding: 6px 9px;
+  border: 1px solid #c8cfbf;
+  border-radius: 6px;
+  background: #fbfaf4;
+  color: #283038;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: pre-line;
+  word-break: break-word;
+  box-shadow: 0 4px 14px rgba(31, 42, 48, 0.18);
+  pointer-events: none;
+}
+
 .side-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);

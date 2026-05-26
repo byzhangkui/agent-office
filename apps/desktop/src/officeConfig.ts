@@ -75,7 +75,9 @@ function pickDeskId(params: { agentId: string; existingAgents: Agent[]; fallback
     return availableDeskId;
   }
 
-  return deskIds[stableHashNumber({ value: params.agentId }) % deskIds.length];
+  // All desks are taken: overflow agents share the meeting room, where crowd
+  // formation spreads them out and no desk label box is drawn (no overlap).
+  return "meeting";
 }
 
 function uniqueStrings(params: { values: string[] }): string[] {

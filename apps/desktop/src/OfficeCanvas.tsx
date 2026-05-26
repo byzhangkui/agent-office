@@ -18,10 +18,17 @@ interface StageTransform {
   offsetY: number;
 }
 
+interface DeskTooltip {
+  text: string;
+  left: number;
+  top: number;
+}
+
 /** Renders the animated office scene with PixiJS. */
 export function OfficeCanvas(): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null);
   const [stageTransform, setStageTransform] = useState<StageTransform>({ scale: 1, offsetX: 0, offsetY: 0 });
+  const [deskTooltip, setDeskTooltip] = useState<DeskTooltip | undefined>(undefined);
   const agents = useOfficeStore((state) => state.agents);
   const clockOutAgent = useOfficeStore((state) => state.clockOutAgent);
 
@@ -103,6 +110,36 @@ export function OfficeCanvas(): JSX.Element {
           );
         })}
       </div>
+      <div className="desk-label-overlay" aria-hidden="true">
+        {agents.map((agent) => {
+          const data = deskLabelData({ agent });
+          if (!data.truncated) {
+            return undefined;
+          }
+          const boxStyle = deskLabelBoxStyle({ agent, transform: stageTransform });
+          if (boxStyle === undefined) {
+            return undefined;
+          }
+          return (
+            <div
+              key={agent.id}
+              className="desk-label-hit"
+              style={boxStyle}
+              onMouseEnter={() => setDeskTooltip({
+                text: `${data.name}\n${data.title}`,
+                left: boxStyle.left as number,
+                top: boxStyle.top as number,
+              })}
+              onMouseLeave={() => setDeskTooltip(undefined)}
+            />
+          );
+        })}
+      </div>
+      {deskTooltip !== undefined && (
+        <div className="desk-label-tooltip" style={{ left: deskTooltip.left, top: deskTooltip.top }}>
+          {deskTooltip.text}
+        </div>
+      )}
     </div>
   );
 }
@@ -325,13 +362,8 @@ function drawAgent(params: { layer: Container; agent: Agent; selected: boolean }
   }
 
   if (params.agent.status === "blocked" || params.agent.status === "waiting") {
-    const marker = new Text({
-      text: params.agent.status === "blocked" ? "!" : "?",
-      style: { fontFamily: "Inter, ui-sans-serif, system-ui", fontSize: 22, fontWeight: "700", fill: 0xc24444 },
-    });
-    marker.anchor.set(0.5);
-    marker.position.set(x + 20, y - 24);
-    params.layer.addChild(marker);
+    drawRaisedHand({ layer: params.layer, agent: params.agent });
+    drawHelpBubble({ layer: params.layer, agent: params.agent });
   }
 
   if (distanceToTarget > 4) {
@@ -347,6 +379,52 @@ function drawAgent(params: { layer: Container; agent: Agent; selected: boolean }
 
 function hexToNumber(params: { hex: string }): number {
   return Number.parseInt(params.hex.replace("#", ""), 16);
+}
+
+/** Draws a gently waving raised arm so an agent that needs attention looks like it is asking for help. */
+function drawRaisedHand(params: { layer: Container; agent: Agent }): void {
+  const x = params.agent.position.x;
+  const y = params.agent.position.y;
+  const color = hexToNumber({ hex: params.agent.avatarColor });
+  const wave = Math.sin(Date.now() / 180) * 2.5;
+  const shoulderX = x + 7;
+  const shoulderY = y + 8;
+  const handX = x + 17 + wave;
+  const handY = y - 20;
+
+  const arm = new Graphics();
+  arm.moveTo(shoulderX, shoulderY)
+    .lineTo(handX, handY)
+    .stroke({ color, width: 5, cap: "round" });
+  arm.circle(handX, handY, 4).fill({ color });
+  params.layer.addChild(arm);
+}
+
+/** Draws a "老板" speech bubble above an agent that is waiting for help. */
+function drawHelpBubble(params: { layer: Container; agent: Agent }): void {
+  const x = params.agent.position.x;
+  const y = params.agent.position.y - 36;
+
+  const label = new Text({
+    text: "老板",
+    style: { fontFamily: "Inter, ui-sans-serif, system-ui", fontSize: 11, fontWeight: "700", fill: 0xc24444 },
+  });
+  label.anchor.set(0.5);
+  label.position.set(x, y);
+
+  const width = label.width + 16;
+  const height = label.height + 10;
+  const bubble = new Graphics();
+  bubble.roundRect(x - width / 2, y - height / 2, width, height, 7)
+    .fill({ color: 0xfff2b8, alpha: 0.98 })
+    .stroke({ color: 0xc7973c, width: 1.4, alpha: 0.95 });
+  bubble.moveTo(x - 4, y + height / 2 - 1)
+    .lineTo(x, y + height / 2 + 6)
+    .lineTo(x + 5, y + height / 2 - 1)
+    .closePath()
+    .fill({ color: 0xfff2b8, alpha: 0.98 });
+  params.layer.addChild(bubble);
+  params.layer.addChild(label);
 }
 
 function drawWorkIndicator(params: { layer: Container; agent: Agent }): void {
@@ -387,7 +465,35 @@ function deskAssignmentText(params: { agent: Agent }): string {
   const title = params.agent.status === "working"
     ? params.agent.taskTitle
     : params.agent.lastTaskTitle;
-  return `${truncateDeskText({ value: params.agent.name, maxLength: 13 })}\n${truncateDeskText({ value: title ?? "暂无任务", maxLength: 16 })}`;
+  return `${truncateDeskText({ value: params.agent.name, maxLength: 13 })}\n${truncateDeskText({ value: title ?? "暂无任务", maxLength: 36 })}`;
+}
+
+/** Full desk-label content and whether either line is truncated in the canvas. */
+function deskLabelData(params: { agent: Agent }): { name: string; title: string; truncated: boolean } {
+  const rawTitle = params.agent.status === "working"
+    ? params.agent.taskTitle
+    : params.agent.lastTaskTitle;
+  const name = params.agent.name;
+  const title = rawTitle ?? "暂无任务";
+  return { name, title, truncated: name.length > 13 || title.length > 36 };
+}
+
+/** Screen rectangle of the desk-label box, matching drawDeskAssignment geometry. */
+function deskLabelBoxStyle(params: { agent: Agent; transform: StageTransform }): CSSProperties | undefined {
+  const desk = getZoneById({ zoneId: params.agent.deskId });
+  if (desk === undefined || desk.kind !== "desk") {
+    return undefined;
+  }
+  const worldLeft = desk.center.x - desk.width / 2 + 5;
+  const worldTop = desk.center.y + desk.height / 2 + 3;
+  const worldWidth = desk.width - 10;
+  const worldHeight = 46;
+  return {
+    left: params.transform.offsetX + worldLeft * params.transform.scale,
+    top: params.transform.offsetY + worldTop * params.transform.scale,
+    width: worldWidth * params.transform.scale,
+    height: worldHeight * params.transform.scale,
+  };
 }
 
 function drawAgentLabel(params: { layer: Container; agent: Agent }): void {
