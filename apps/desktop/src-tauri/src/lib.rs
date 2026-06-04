@@ -17,10 +17,11 @@ use std::{
 };
 use tauri::{
     image::Image,
-    menu::{Menu, MenuItem, PredefinedMenuItem},
+    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, PhysicalPosition, Rect, State, WebviewWindow, WindowEvent,
 };
+use tauri_plugin_autostart::ManagerExt;
 use toml_edit::{value as toml_value, DocumentMut, Item, Table};
 
 // Known real agent sources, each paired with the identity key its adapter
@@ -37,6 +38,7 @@ const SETTINGS_EVENT_NAME: &str = "open-settings";
 const TRAY_ID: &str = "agent-office";
 const TRAY_MENU_SHOW_ID: &str = "show";
 const TRAY_MENU_SETTINGS_ID: &str = "settings";
+const TRAY_MENU_AUTOSTART_ID: &str = "autostart";
 const TRAY_MENU_QUIT_ID: &str = "quit";
 const POPOVER_MARGIN: f64 = 8.0;
 const AUTO_HIDE_DELAY_MS: u64 = 120;
@@ -190,9 +192,14 @@ fn unregister_codex_hooks() -> Result<CodexHookOperationResult, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            enable_autostart_on_first_run(app.handle());
             setup_status_bar(app.handle()).map_err(to_boxed_error)?;
             setup_close_to_hide(app.handle());
             let token = load_or_create_hook_token().map_err(to_boxed_error)?;
@@ -219,6 +226,40 @@ pub fn run() {
         .expect("failed to run Agent Office");
 }
 
+fn is_autostart_enabled(app: &AppHandle) -> bool {
+    app.autolaunch().is_enabled().unwrap_or(false)
+}
+
+fn toggle_autostart(app: &AppHandle) {
+    let manager = app.autolaunch();
+    let result = if manager.is_enabled().unwrap_or(false) {
+        manager.disable()
+    } else {
+        manager.enable()
+    };
+    if let Err(error) = result {
+        eprintln!("cannot toggle autostart: {error}");
+    }
+}
+
+// Turn on launch-at-login the first time the app runs, recorded with a sentinel
+// file so a user who later disables it from the tray is not overridden.
+fn enable_autostart_on_first_run(app: &AppHandle) {
+    let Ok(config_dir) = app.path().app_config_dir() else {
+        return;
+    };
+    let sentinel = config_dir.join("autostart-initialized");
+    if sentinel.exists() {
+        return;
+    }
+    if let Err(error) = app.autolaunch().enable() {
+        eprintln!("cannot enable autostart on first run: {error}");
+        return;
+    }
+    let _ = fs::create_dir_all(&config_dir);
+    let _ = fs::write(&sentinel, b"1");
+}
+
 fn setup_status_bar(app: &AppHandle) -> Result<(), String> {
     let show_item = MenuItem::with_id(
         app,
@@ -231,12 +272,30 @@ fn setup_status_bar(app: &AppHandle) -> Result<(), String> {
     let settings_item =
         MenuItem::with_id(app, TRAY_MENU_SETTINGS_ID, "设置", true, None::<&str>)
             .map_err(|error| format!("cannot create tray settings menu item: {error}"))?;
+    let autostart_item = CheckMenuItem::with_id(
+        app,
+        TRAY_MENU_AUTOSTART_ID,
+        "开机时启动",
+        true,
+        is_autostart_enabled(app),
+        None::<&str>,
+    )
+    .map_err(|error| format!("cannot create tray autostart menu item: {error}"))?;
     let separator = PredefinedMenuItem::separator(app)
         .map_err(|error| format!("cannot create tray menu separator: {error}"))?;
     let quit_item = MenuItem::with_id(app, TRAY_MENU_QUIT_ID, "退出", true, None::<&str>)
         .map_err(|error| format!("cannot create tray quit menu item: {error}"))?;
-    let menu = Menu::with_items(app, &[&show_item, &settings_item, &separator, &quit_item])
-        .map_err(|error| format!("cannot create tray menu: {error}"))?;
+    let menu = Menu::with_items(
+        app,
+        &[
+            &show_item,
+            &settings_item,
+            &autostart_item,
+            &separator,
+            &quit_item,
+        ],
+    )
+    .map_err(|error| format!("cannot create tray menu: {error}"))?;
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(create_tray_template_icon())
         .icon_as_template(true)
@@ -246,6 +305,7 @@ fn setup_status_bar(app: &AppHandle) -> Result<(), String> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             TRAY_MENU_SHOW_ID => show_main_window(app),
             TRAY_MENU_SETTINGS_ID => open_settings_window(app),
+            TRAY_MENU_AUTOSTART_ID => toggle_autostart(app),
             TRAY_MENU_QUIT_ID => app.exit(0),
             _ => {}
         })
