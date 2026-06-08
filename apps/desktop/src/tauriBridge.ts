@@ -5,6 +5,8 @@ import type {
   AgentHookEvent,
   BridgeLogItem,
   BridgeLogLevel,
+  ClaudeHookOperationResult,
+  ClaudeHookSettings,
   CodexHookOperationResult,
   CodexHookSettings,
   HookParseResult,
@@ -28,6 +30,14 @@ export type CodexHookSettingsResult =
 
 export type CodexHookOperationBridgeResult =
   | { ok: true; result: CodexHookOperationResult }
+  | { ok: false; error: string };
+
+export type ClaudeHookSettingsResult =
+  | { ok: true; settings: ClaudeHookSettings }
+  | { ok: false; error: string };
+
+export type ClaudeHookOperationBridgeResult =
+  | { ok: true; result: ClaudeHookOperationResult }
   | { ok: false; error: string };
 
 /** Reads accepted hook event history from the Tauri backend. */
@@ -76,6 +86,28 @@ export async function unregisterCodexHooks(): Promise<CodexHookOperationBridgeRe
   return runCodexHookOperation({ command: "unregister_codex_hooks", action: "取消注册 Codex hooks" });
 }
 
+/** Reads Claude Code hook registration status from the Tauri backend. */
+export async function fetchClaudeHookSettings(): Promise<ClaudeHookSettingsResult> {
+  let raw: unknown;
+  try {
+    raw = await invoke("get_claude_hook_settings");
+  } catch (error) {
+    return { ok: false, error: formatTauriError({ error, action: "读取 Claude Code hook 设置" }) };
+  }
+
+  return normalizeClaudeHookSettings({ raw });
+}
+
+/** Registers Agent Office Claude Code hooks. */
+export async function registerClaudeHooks(): Promise<ClaudeHookOperationBridgeResult> {
+  return runClaudeHookOperation({ command: "register_claude_hooks", action: "注册 Claude Code hooks" });
+}
+
+/** Removes Agent Office Claude Code hooks. */
+export async function unregisterClaudeHooks(): Promise<ClaudeHookOperationBridgeResult> {
+  return runClaudeHookOperation({ command: "unregister_claude_hooks", action: "取消注册 Claude Code hooks" });
+}
+
 /** Subscribes to hook events emitted by the Tauri backend. */
 export async function listenForHookEvents(params: { onEvent: (params: { event: AgentHookEvent }) => void; onError: (params: { error: string }) => void }): Promise<() => void> {
   return listen("hook-event", (payload) => {
@@ -114,6 +146,72 @@ async function runCodexHookOperation(params: { command: "register_codex_hooks" |
   }
 
   return normalizeCodexHookOperation({ raw });
+}
+
+async function runClaudeHookOperation(params: { command: "register_claude_hooks" | "unregister_claude_hooks"; action: string }): Promise<ClaudeHookOperationBridgeResult> {
+  let raw: unknown;
+  try {
+    raw = await invoke(params.command);
+  } catch (error) {
+    return { ok: false, error: formatTauriError({ error, action: params.action }) };
+  }
+
+  return normalizeClaudeHookOperation({ raw });
+}
+
+function normalizeClaudeHookOperation(params: { raw: unknown }): ClaudeHookOperationBridgeResult {
+  if (!isRecord(params.raw)) {
+    return { ok: false, error: "Claude Code hook 操作响应必须是对象" };
+  }
+  const message = readString({ source: params.raw, key: "message" });
+  const settingsResult = normalizeClaudeHookSettings({ raw: params.raw.settings });
+  if (message === undefined || !settingsResult.ok) {
+    return { ok: false, error: settingsResult.ok ? "Claude Code hook 操作响应缺少消息" : settingsResult.error };
+  }
+  return {
+    ok: true,
+    result: {
+      settings: settingsResult.settings,
+      message,
+    },
+  };
+}
+
+function normalizeClaudeHookSettings(params: { raw: unknown }): ClaudeHookSettingsResult {
+  if (!isRecord(params.raw)) {
+    return { ok: false, error: "Claude Code hook 设置响应必须是对象" };
+  }
+
+  const claudeHome = readString({ source: params.raw, key: "claudeHome" });
+  const settingsPath = readString({ source: params.raw, key: "settingsPath" });
+  const adapterPath = readString({ source: params.raw, key: "adapterPath" });
+  const errorLogPath = readString({ source: params.raw, key: "errorLogPath" });
+  if (claudeHome === undefined || settingsPath === undefined || adapterPath === undefined || errorLogPath === undefined) {
+    return { ok: false, error: "Claude Code hook 设置响应缺少路径字段" };
+  }
+
+  const registeredEvents = readStringArray({ source: params.raw, key: "registeredEvents" });
+  const missingEvents = readStringArray({ source: params.raw, key: "missingEvents" });
+  if (registeredEvents === undefined || missingEvents === undefined) {
+    return { ok: false, error: "Claude Code hook 设置响应缺少事件列表" };
+  }
+
+  return {
+    ok: true,
+    settings: {
+      claudeHome,
+      settingsPath,
+      adapterPath,
+      errorLogPath,
+      adapterExists: readBoolean({ source: params.raw, key: "adapterExists" }),
+      settingsFileExists: readBoolean({ source: params.raw, key: "settingsFileExists" }),
+      registeredEvents,
+      missingEvents,
+      installed: readBoolean({ source: params.raw, key: "installed" }),
+      restartRequired: readBoolean({ source: params.raw, key: "restartRequired" }),
+      lastErrorLog: readString({ source: params.raw, key: "lastErrorLog" }),
+    },
+  };
 }
 
 function normalizeEventPayload(params: { payload: unknown }): HookParseResult {

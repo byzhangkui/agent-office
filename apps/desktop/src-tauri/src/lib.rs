@@ -52,6 +52,14 @@ const CODEX_HOOK_EVENTS: &[&str] = &[
     "PreCompact",
     "PostCompact",
 ];
+const CLAUDE_HOOK_EVENTS: &[&str] = &[
+    "SessionStart",
+    "UserPromptSubmit",
+    "Notification",
+    "Stop",
+    "SubagentStop",
+    "PreCompact",
+];
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -148,6 +156,37 @@ struct CodexHookFeatures {
     plugin_hooks_enabled: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ClaudeHookSettings {
+    claude_home: String,
+    settings_path: String,
+    adapter_path: String,
+    error_log_path: String,
+    adapter_exists: bool,
+    settings_file_exists: bool,
+    registered_events: Vec<String>,
+    missing_events: Vec<String>,
+    installed: bool,
+    restart_required: bool,
+    last_error_log: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ClaudeHookOperationResult {
+    settings: ClaudeHookSettings,
+    message: String,
+}
+
+#[derive(Debug, Clone)]
+struct ClaudeHookPaths {
+    claude_home: PathBuf,
+    settings_path: PathBuf,
+    adapter_path: PathBuf,
+    error_log_path: PathBuf,
+}
+
 #[tauri::command]
 fn get_history(state: State<'_, Arc<HookServerState>>) -> Result<Vec<HookEvent>, String> {
     let events = state
@@ -177,6 +216,29 @@ fn register_codex_hooks() -> Result<CodexHookOperationResult, String> {
     Ok(CodexHookOperationResult {
         settings: inspect_codex_hook_settings()?,
         message: "Codex hooks 已注册，重启 Codex 后生效".to_string(),
+    })
+}
+
+#[tauri::command]
+fn get_claude_hook_settings() -> Result<ClaudeHookSettings, String> {
+    inspect_claude_hook_settings()
+}
+
+#[tauri::command]
+fn register_claude_hooks() -> Result<ClaudeHookOperationResult, String> {
+    install_agent_office_claude_hooks()?;
+    Ok(ClaudeHookOperationResult {
+        settings: inspect_claude_hook_settings()?,
+        message: "Claude Code hooks 已注册，重启 Claude Code 后生效".to_string(),
+    })
+}
+
+#[tauri::command]
+fn unregister_claude_hooks() -> Result<ClaudeHookOperationResult, String> {
+    remove_agent_office_claude_hooks()?;
+    Ok(ClaudeHookOperationResult {
+        settings: inspect_claude_hook_settings()?,
+        message: "Agent Office hooks 已从 Claude Code 取消注册".to_string(),
     })
 }
 
@@ -220,7 +282,10 @@ pub fn run() {
             get_logs,
             get_codex_hook_settings,
             register_codex_hooks,
-            unregister_codex_hooks
+            unregister_codex_hooks,
+            get_claude_hook_settings,
+            register_claude_hooks,
+            unregister_claude_hooks
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Agent Office");
@@ -1070,6 +1135,238 @@ fn resolve_adapter_path() -> PathBuf {
         .join("src")
         .join("codex-hook-adapter.mjs");
     candidate.canonicalize().unwrap_or(candidate)
+}
+
+fn inspect_claude_hook_settings() -> Result<ClaudeHookSettings, String> {
+    let paths = resolve_claude_hook_paths()?;
+    let settings_file_exists = paths.settings_path.exists();
+    let settings = read_claude_settings_or_empty(&paths.settings_path)?;
+    let registered_events = registered_claude_office_events(&settings, &paths.adapter_path);
+    let missing_events = CLAUDE_HOOK_EVENTS
+        .iter()
+        .filter(|event_name| {
+            !registered_events
+                .iter()
+                .any(|registered| registered == *event_name)
+        })
+        .map(|event_name| (*event_name).to_string())
+        .collect::<Vec<_>>();
+    let adapter_exists = paths.adapter_path.is_file();
+    let installed = adapter_exists && missing_events.is_empty();
+
+    Ok(ClaudeHookSettings {
+        claude_home: path_to_string(&paths.claude_home),
+        settings_path: path_to_string(&paths.settings_path),
+        adapter_path: path_to_string(&paths.adapter_path),
+        error_log_path: path_to_string(&paths.error_log_path),
+        adapter_exists,
+        settings_file_exists,
+        registered_events,
+        missing_events,
+        installed,
+        restart_required: true,
+        last_error_log: read_text_tail(&paths.error_log_path, 16)?,
+    })
+}
+
+fn install_agent_office_claude_hooks() -> Result<(), String> {
+    let paths = resolve_claude_hook_paths()?;
+    if !paths.adapter_path.is_file() {
+        return Err(format!(
+            "Claude hook adapter is missing at {}",
+            paths.adapter_path.display()
+        ));
+    }
+
+    let mut settings = read_claude_settings_or_empty(&paths.settings_path)?;
+    merge_agent_office_claude_hooks(&mut settings, &paths.adapter_path)?;
+    write_claude_settings_with_backup(&paths.settings_path, &settings)?;
+    Ok(())
+}
+
+fn remove_agent_office_claude_hooks() -> Result<(), String> {
+    let paths = resolve_claude_hook_paths()?;
+    if !paths.settings_path.exists() {
+        return Ok(());
+    }
+
+    let mut settings = read_claude_settings_or_empty(&paths.settings_path)?;
+    remove_agent_office_claude_entries(&mut settings, &paths.adapter_path)?;
+    write_claude_settings_with_backup(&paths.settings_path, &settings)?;
+    Ok(())
+}
+
+fn resolve_claude_hook_paths() -> Result<ClaudeHookPaths, String> {
+    let home =
+        env::var_os("HOME").ok_or_else(|| "HOME is required to locate Claude hooks".to_string())?;
+    let claude_home = env::var_os("CLAUDE_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(home).join(".claude"));
+    let settings_path = claude_home.join("settings.json");
+    let adapter_path = resolve_claude_adapter_path();
+    let error_log_path = agent_office_state_dir()?
+        .join("logs")
+        .join("hook-errors.log");
+
+    Ok(ClaudeHookPaths {
+        claude_home,
+        settings_path,
+        adapter_path,
+        error_log_path,
+    })
+}
+
+fn resolve_claude_adapter_path() -> PathBuf {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let candidate = manifest_dir
+        .join("..")
+        .join("..")
+        .join("..")
+        .join("packages")
+        .join("hook-adapter")
+        .join("src")
+        .join("claude-hook-adapter.mjs");
+    candidate.canonicalize().unwrap_or(candidate)
+}
+
+// Claude keeps hooks inside the shared ~/.claude/settings.json alongside many
+// unrelated keys (statusLine, model, etc.). We parse the whole document and only
+// touch the "hooks" sub-object so the rest of the user's settings survive.
+fn read_claude_settings_or_empty(settings_path: &Path) -> Result<Value, String> {
+    if !settings_path.exists() {
+        return Ok(json!({ "hooks": {} }));
+    }
+
+    let text = fs::read_to_string(settings_path).map_err(|error| {
+        format!(
+            "cannot read Claude settings at {}: {error}",
+            settings_path.display()
+        )
+    })?;
+    let value: Value = serde_json::from_str(&text).map_err(|error| {
+        format!(
+            "cannot parse Claude settings at {}: {error}",
+            settings_path.display()
+        )
+    })?;
+    if !value.is_object() {
+        return Err(format!(
+            "Claude settings at {} must be a JSON object",
+            settings_path.display()
+        ));
+    }
+    Ok(value)
+}
+
+fn write_claude_settings_with_backup(settings_path: &Path, settings: &Value) -> Result<(), String> {
+    if let Some(parent) = settings_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "cannot create Claude settings directory at {}: {error}",
+                parent.display()
+            )
+        })?;
+    }
+    backup_file_if_exists(settings_path)?;
+    let text = serde_json::to_string_pretty(settings)
+        .map_err(|error| format!("cannot serialize Claude settings: {error}"))?;
+    fs::write(settings_path, format!("{text}\n")).map_err(|error| {
+        format!(
+            "cannot write Claude settings at {}: {error}",
+            settings_path.display()
+        )
+    })
+}
+
+fn merge_agent_office_claude_hooks(settings: &mut Value, adapter_path: &Path) -> Result<(), String> {
+    let command = build_adapter_command(adapter_path);
+    let hooks_object = ensure_hooks_object(settings)?;
+
+    for event_name in CLAUDE_HOOK_EVENTS {
+        let groups_value = hooks_object
+            .entry((*event_name).to_string())
+            .or_insert_with(|| Value::Array(Vec::new()));
+        let mut groups = groups_value.as_array().cloned().unwrap_or_default();
+        groups.retain(|group| !is_agent_office_claude_entry(group, adapter_path));
+        groups.push(build_claude_hook_entry(&command));
+        *groups_value = Value::Array(groups);
+    }
+
+    Ok(())
+}
+
+fn remove_agent_office_claude_entries(
+    settings: &mut Value,
+    adapter_path: &Path,
+) -> Result<(), String> {
+    let hooks_object = ensure_hooks_object(settings)?;
+    let event_names = hooks_object.keys().cloned().collect::<Vec<_>>();
+    for event_name in event_names {
+        let Some(groups_value) = hooks_object.get_mut(&event_name) else {
+            continue;
+        };
+        let Some(groups) = groups_value.as_array_mut() else {
+            continue;
+        };
+        groups.retain(|group| !is_agent_office_claude_entry(group, adapter_path));
+        if groups.is_empty() {
+            hooks_object.remove(&event_name);
+        }
+    }
+    Ok(())
+}
+
+fn registered_claude_office_events(settings: &Value, adapter_path: &Path) -> Vec<String> {
+    let Some(hooks_object) = settings.get("hooks").and_then(|value| value.as_object()) else {
+        return Vec::new();
+    };
+
+    CLAUDE_HOOK_EVENTS
+        .iter()
+        .filter(|event_name| {
+            hooks_object
+                .get(**event_name)
+                .and_then(|value| value.as_array())
+                .is_some_and(|groups| {
+                    groups
+                        .iter()
+                        .any(|group| is_agent_office_claude_entry(group, adapter_path))
+                })
+        })
+        .map(|event_name| (*event_name).to_string())
+        .collect()
+}
+
+fn build_claude_hook_entry(command: &str) -> Value {
+    json!({
+        "hooks": [
+            {
+                "type": "command",
+                "command": command,
+                "timeout": 5
+            }
+        ]
+    })
+}
+
+fn is_agent_office_claude_entry(group: &Value, adapter_path: &Path) -> bool {
+    let Some(hooks) = group.get("hooks").and_then(|value| value.as_array()) else {
+        return false;
+    };
+    hooks.iter().any(|hook| {
+        let Some(command) = hook.get("command").and_then(|value| value.as_str()) else {
+            return false;
+        };
+        hook.get("type").and_then(|value| value.as_str()) == Some("command")
+            && is_agent_office_claude_command(command, adapter_path)
+    })
+}
+
+fn is_agent_office_claude_command(command: &str, adapter_path: &Path) -> bool {
+    let adapter = path_to_string(adapter_path);
+    command.contains(&adapter)
+        || command.contains("scripts/claude-hook-adapter.mjs")
+        || command.contains("packages/hook-adapter/src/claude-hook-adapter.mjs")
 }
 
 fn read_codex_hook_features(config_path: &Path) -> Result<CodexHookFeatures, String> {

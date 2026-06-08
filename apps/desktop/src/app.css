@@ -547,6 +547,38 @@ h2 {
   font-size: 12px;
 }
 
+.settings-source-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 9px;
+  background: #e7ece0;
+  border: 1px solid #d7dccf;
+  align-self: flex-start;
+}
+
+.settings-source-tab {
+  border: none;
+  background: transparent;
+  color: #4e5b52;
+  cursor: pointer;
+  min-height: 28px;
+  padding: 0 14px;
+  border-radius: 7px;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.settings-source-tab:disabled {
+  cursor: not-allowed;
+}
+
+.settings-source-tab.active {
+  background: #ffffff;
+  color: #263741;
+  box-shadow: 0 1px 2px rgba(38, 55, 65, 0.12);
+}
+
 .settings-actions {
   gap: 8px;
   flex-wrap: wrap;

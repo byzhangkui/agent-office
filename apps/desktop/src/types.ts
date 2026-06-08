@@ -117,6 +117,25 @@ export interface CodexHookOperationResult {
   message: string;
 }
 
+export interface ClaudeHookSettings {
+  claudeHome: string;
+  settingsPath: string;
+  adapterPath: string;
+  errorLogPath: string;
+  adapterExists: boolean;
+  settingsFileExists: boolean;
+  registeredEvents: string[];
+  missingEvents: string[];
+  installed: boolean;
+  restartRequired: boolean;
+  lastErrorLog: string | undefined;
+}
+
+export interface ClaudeHookOperationResult {
+  settings: ClaudeHookSettings;
+  message: string;
+}
+
 export interface HookParseSuccess {
   ok: true;
   event: AgentHookEvent;

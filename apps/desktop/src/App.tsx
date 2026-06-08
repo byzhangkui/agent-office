@@ -15,12 +15,15 @@ import "./app.css";
 import { useTauriBridge } from "./useTauriBridge";
 import { useOfficeStore } from "./store";
 import {
+  fetchClaudeHookSettings,
   fetchCodexHookSettings,
   listenForOpenSettings,
+  registerClaudeHooks,
   registerCodexHooks,
+  unregisterClaudeHooks,
   unregisterCodexHooks,
 } from "./tauriBridge";
-import type { BridgeLogItem, CodexHookSettings } from "./types";
+import type { BridgeLogItem, ClaudeHookSettings, CodexHookSettings } from "./types";
 
 type ActivityView = "events" | "logs";
 const beijingTimeZone = "Asia/Shanghai";
@@ -144,38 +147,64 @@ export default function App(): JSX.Element {
   );
 }
 
+type HookSource = "codex" | "claude";
+
 function SettingsPanel(params: { onClose: () => void }): JSX.Element {
-  const [settings, setSettings] = useState<CodexHookSettings | undefined>(undefined);
+  const [source, setSource] = useState<HookSource>("codex");
+  const [codexSettings, setCodexSettings] = useState<CodexHookSettings | undefined>(undefined);
+  const [claudeSettings, setClaudeSettings] = useState<ClaudeHookSettings | undefined>(undefined);
   const [busy, setBusy] = useState<"register" | "unregister" | "refresh" | undefined>("refresh");
   const [message, setMessage] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
 
-  const loadSettings = useCallback(async () => {
+  const settings = source === "codex" ? codexSettings : claudeSettings;
+
+  const loadSettings = useCallback(async (target: HookSource) => {
     setBusy("refresh");
     setError(undefined);
-    const result = await fetchCodexHookSettings();
-    if (result.ok) {
-      setSettings(result.settings);
+    if (target === "codex") {
+      const result = await fetchCodexHookSettings();
+      if (result.ok) {
+        setCodexSettings(result.settings);
+      } else {
+        setError(result.error);
+      }
     } else {
-      setError(result.error);
+      const result = await fetchClaudeHookSettings();
+      if (result.ok) {
+        setClaudeSettings(result.settings);
+      } else {
+        setError(result.error);
+      }
     }
     setBusy(undefined);
   }, []);
 
   useEffect(() => {
-    void loadSettings();
-  }, [loadSettings]);
+    setMessage(undefined);
+    void loadSettings(source);
+  }, [loadSettings, source]);
 
   const runRegister = async (): Promise<void> => {
     setBusy("register");
     setError(undefined);
     setMessage(undefined);
-    const result = await registerCodexHooks();
-    if (result.ok) {
-      setSettings(result.result.settings);
-      setMessage(result.result.message);
+    if (source === "codex") {
+      const result = await registerCodexHooks();
+      if (result.ok) {
+        setCodexSettings(result.result.settings);
+        setMessage(result.result.message);
+      } else {
+        setError(result.error);
+      }
     } else {
-      setError(result.error);
+      const result = await registerClaudeHooks();
+      if (result.ok) {
+        setClaudeSettings(result.result.settings);
+        setMessage(result.result.message);
+      } else {
+        setError(result.error);
+      }
     }
     setBusy(undefined);
   };
@@ -184,12 +213,22 @@ function SettingsPanel(params: { onClose: () => void }): JSX.Element {
     setBusy("unregister");
     setError(undefined);
     setMessage(undefined);
-    const result = await unregisterCodexHooks();
-    if (result.ok) {
-      setSettings(result.result.settings);
-      setMessage(result.result.message);
+    if (source === "codex") {
+      const result = await unregisterCodexHooks();
+      if (result.ok) {
+        setCodexSettings(result.result.settings);
+        setMessage(result.result.message);
+      } else {
+        setError(result.error);
+      }
     } else {
-      setError(result.error);
+      const result = await unregisterClaudeHooks();
+      if (result.ok) {
+        setClaudeSettings(result.result.settings);
+        setMessage(result.result.message);
+      } else {
+        setError(result.error);
+      }
     }
     setBusy(undefined);
   };
@@ -206,6 +245,29 @@ function SettingsPanel(params: { onClose: () => void }): JSX.Element {
             <X size={15} />
           </button>
         </header>
+
+        <div className="settings-source-tabs" role="tablist" aria-label="Agent 来源">
+          <button
+            className={`settings-source-tab${source === "codex" ? " active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={source === "codex"}
+            disabled={busy !== undefined}
+            onClick={() => setSource("codex")}
+          >
+            Codex
+          </button>
+          <button
+            className={`settings-source-tab${source === "claude" ? " active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={source === "claude"}
+            disabled={busy !== undefined}
+            onClick={() => setSource("claude")}
+          >
+            Claude Code
+          </button>
+        </div>
 
         <div className="settings-status-line">
           {settings === undefined ? (
@@ -229,33 +291,67 @@ function SettingsPanel(params: { onClose: () => void }): JSX.Element {
             <Link2Off size={16} />
             <span>{busy === "unregister" ? "取消中" : "取消注册"}</span>
           </button>
-          <button className="mini-icon-button" type="button" disabled={busy !== undefined} onClick={() => void loadSettings()} title="刷新" aria-label="刷新">
+          <button className="mini-icon-button" type="button" disabled={busy !== undefined} onClick={() => void loadSettings(source)} title="刷新" aria-label="刷新">
             <RefreshCw size={14} />
           </button>
         </div>
 
-        {settings === undefined ? undefined : (
-          <div className="settings-grid">
-            <SettingsRow label="Codex hooks" value={settings.hooksEnabled ? "开启" : "关闭"} tone={settings.hooksEnabled ? "active" : "danger"} />
-            <SettingsRow label="Plugin hooks" value={settings.pluginHooksEnabled ? "开启" : "关闭"} tone={settings.pluginHooksEnabled ? "active" : "warning"} />
-            <SettingsRow label="事件" value={`${settings.registeredEvents.length}/${settings.registeredEvents.length + settings.missingEvents.length}`} tone={settings.missingEvents.length === 0 ? "active" : "warning"} />
-            <SettingsRow label="Adapter" value={settings.adapterExists ? "存在" : "缺失"} tone={settings.adapterExists ? "active" : "danger"} />
-            <PathRow label="Codex home" value={settings.codexHome} />
-            <PathRow label="hooks.json" value={settings.hooksPath} />
-            <PathRow label="config.toml" value={settings.configPath} />
-            <PathRow label="Adapter path" value={settings.adapterPath} />
-            {settings.missingEvents.length === 0 ? undefined : (
-              <PathRow label="缺失事件" value={settings.missingEvents.join(", ")} />
-            )}
-            {settings.lastErrorLog === undefined ? undefined : (
-              <div className="settings-log">
-                <span>Adapter errors</span>
-                <pre>{formatAdapterErrorLog({ text: settings.lastErrorLog })}</pre>
-              </div>
-            )}
-          </div>
-        )}
+        {source === "codex"
+          ? codexSettings === undefined
+            ? undefined
+            : <CodexSettingsGrid settings={codexSettings} />
+          : claudeSettings === undefined
+            ? undefined
+            : <ClaudeSettingsGrid settings={claudeSettings} />}
       </section>
+    </div>
+  );
+}
+
+function CodexSettingsGrid(params: { settings: CodexHookSettings }): JSX.Element {
+  const { settings } = params;
+  return (
+    <div className="settings-grid">
+      <SettingsRow label="Codex hooks" value={settings.hooksEnabled ? "开启" : "关闭"} tone={settings.hooksEnabled ? "active" : "danger"} />
+      <SettingsRow label="Plugin hooks" value={settings.pluginHooksEnabled ? "开启" : "关闭"} tone={settings.pluginHooksEnabled ? "active" : "warning"} />
+      <SettingsRow label="事件" value={`${settings.registeredEvents.length}/${settings.registeredEvents.length + settings.missingEvents.length}`} tone={settings.missingEvents.length === 0 ? "active" : "warning"} />
+      <SettingsRow label="Adapter" value={settings.adapterExists ? "存在" : "缺失"} tone={settings.adapterExists ? "active" : "danger"} />
+      <PathRow label="Codex home" value={settings.codexHome} />
+      <PathRow label="hooks.json" value={settings.hooksPath} />
+      <PathRow label="config.toml" value={settings.configPath} />
+      <PathRow label="Adapter path" value={settings.adapterPath} />
+      {settings.missingEvents.length === 0 ? undefined : (
+        <PathRow label="缺失事件" value={settings.missingEvents.join(", ")} />
+      )}
+      {settings.lastErrorLog === undefined ? undefined : (
+        <div className="settings-log">
+          <span>Adapter errors</span>
+          <pre>{formatAdapterErrorLog({ text: settings.lastErrorLog })}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClaudeSettingsGrid(params: { settings: ClaudeHookSettings }): JSX.Element {
+  const { settings } = params;
+  return (
+    <div className="settings-grid">
+      <SettingsRow label="事件" value={`${settings.registeredEvents.length}/${settings.registeredEvents.length + settings.missingEvents.length}`} tone={settings.missingEvents.length === 0 ? "active" : "warning"} />
+      <SettingsRow label="Adapter" value={settings.adapterExists ? "存在" : "缺失"} tone={settings.adapterExists ? "active" : "danger"} />
+      <SettingsRow label="settings.json" value={settings.settingsFileExists ? "存在" : "缺失"} tone={settings.settingsFileExists ? "active" : "warning"} />
+      <PathRow label="Claude home" value={settings.claudeHome} />
+      <PathRow label="settings.json" value={settings.settingsPath} />
+      <PathRow label="Adapter path" value={settings.adapterPath} />
+      {settings.missingEvents.length === 0 ? undefined : (
+        <PathRow label="缺失事件" value={settings.missingEvents.join(", ")} />
+      )}
+      {settings.lastErrorLog === undefined ? undefined : (
+        <div className="settings-log">
+          <span>Adapter errors</span>
+          <pre>{formatAdapterErrorLog({ text: settings.lastErrorLog })}</pre>
+        </div>
+      )}
     </div>
   );
 }
